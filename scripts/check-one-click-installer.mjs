@@ -16,7 +16,7 @@ required(installer, /\[ ! -e "\$install_directory\/\.env" \]/, '一键脚本未�
 required(installer, /download\.docker\.com\/linux\//, 'Docker 未使用官方软件源');
 required(installer, /docker compose version[\s\S]*docker info/, '一键脚本未验证 Compose v2 和 Docker daemon');
 required(installer, /git clone --depth 1 --branch "\$repository_ref" --single-branch/, '一键脚本未固定分支执行浅克隆');
-required(installer, /git -C "\$install_directory" status --porcelain[\s\S]*pull --ff-only origin/, '一键脚本不能安全续用并快进更新官方干净仓库');
+required(installer, /git -C "\$install_directory" status --porcelain[\s\S]*core\.fileMode=false[\s\S]*内容修改[\s\S]*pull --ff-only origin/, '一键脚本不能区分旧脚本的纯权限变化与真实内容修改');
 required(installer, /openssl rand -hex 30[\s\S]*openssl rand -hex 48[\s\S]*openssl rand -hex 18/, '一键脚本没有生成数据库、JWT 和管理员随机密钥');
 required(installer, /mktemp "\$install_directory\/\.env\.tmp\.[X]+"[\s\S]*chmod 600[\s\S]*mv "\$environment_tmp" "\$install_directory\/\.env"/, '一键脚本没有原子写入受保护的生产环境配置');
 required(installer, /docker compose config --quiet[\s\S]*docker compose build --pull[\s\S]*docker compose up -d --wait --wait-timeout 300/, '一键脚本没有直接验证、构建并启动 Compose 服务');
@@ -26,6 +26,7 @@ required(starter, /APPGOG_NODE_BIN:-\/opt\/appgog-runtime\/current\/bin\/node/, 
 required(guide + readme, /install-one-click\.sh[\s\S]*Jerry2586\/APPGOG/, '文档缺少 GitHub 一键安装入口');
 forbidden(installer, /curl[^\n]*\|\s*(?:sh|bash)|\beval\b|docker compose down -v/, '一键脚本包含管道执行远程脚本、eval 或删除数据卷');
 forbidden(installer, /start-installer\.sh|127\.0\.0\.1:3099|nodejs\.org/, '服务器一键脚本仍依赖 Web 向导、3099 或宿主机 Node.js');
+forbidden(installer, /chmod\s+750[^\n]*deploy\/\*\.sh/, '服务器一键脚本不应再次制造 Git 文件权限变化');
 
 if (failures.length) {
   console.error('APPGOG 一键安装检查失败：\n' + failures.map(item => `- ${item}`).join('\n'));

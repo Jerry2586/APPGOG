@@ -158,9 +158,14 @@ prepare_source() {
     [ ! -e "$install_directory/.appgog-install-state.json" ] || fail '检测到安装完成状态，拒绝重复安装。'
     current_remote=$(git -C "$install_directory" remote get-url origin 2>/dev/null || true)
     [ "$current_remote" = "$repository_url" ] || fail '现有目录的 Git 远程地址不是 APPGOG 官方仓库。'
-    [ -z "$(git -C "$install_directory" status --porcelain)" ] || fail '现有源码目录有未提交修改，拒绝自动更新。'
+    working_tree_status=$(git -C "$install_directory" status --porcelain)
+    if [ -n "$working_tree_status" ]; then
+      content_status=$(git -c core.fileMode=false -C "$install_directory" status --porcelain)
+      [ -z "$content_status" ] || fail '现有源码目录有未提交的内容修改，拒绝自动更新。'
+      log '检测到旧安装脚本留下的纯文件权限变化；已安全忽略，不覆盖文件内容。'
+    fi
     log "安全更新现有 $install_directory。"
-    git -C "$install_directory" pull --ff-only origin "$repository_ref"
+    git -c core.fileMode=false -C "$install_directory" pull --ff-only origin "$repository_ref"
   else
     if [ ! -e "$install_directory" ]; then install -m 0750 -d "$install_directory"; fi
     log "从 $repository_url 获取 $repository_ref。"
@@ -169,7 +174,6 @@ prepare_source() {
   [ -f "$install_directory/docker-compose.yml" ] || fail '仓库缺少 docker-compose.yml。'
   [ -f "$install_directory/Dockerfile.api" ] || fail '仓库缺少 Dockerfile.api。'
   [ -f "$install_directory/Dockerfile.web" ] || fail '仓库缺少 Dockerfile.web。'
-  chmod 750 "$install_directory"/deploy/*.sh
 }
 
 write_environment() {
