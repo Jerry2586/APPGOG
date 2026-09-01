@@ -214,7 +214,7 @@ function deploy(dryRun) {
     ['验证 Compose', ['compose', 'config', '--quiet'], 30_000],
     ['构建镜像', ['compose', 'build', '--pull'], 30 * 60_000],
     ['启动服务', ['compose', 'up', '-d'], 10 * 60_000],
-    ['检查 API', ['compose', 'exec', '-T', 'api', 'wget', '--no-verbose', '--tries=10', '--spider', 'http://localhost:3000/api/v1/health/ready'], 120_000],
+    ['检查 API', ['compose', 'exec', '-T', 'api', 'wget', '--no-verbose', '--tries=10', '--spider', 'http://127.0.0.1:3000/api/v1/health/ready'], 120_000],
     ['读取状态', ['compose', 'ps'], 30_000]
   ];
   if (dryRun) return steps.map(([name]) => ({ name, ok: true, output: '演示模式：固定命令验证通过，未写入服务器或启动容器。' }));

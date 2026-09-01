@@ -4,7 +4,7 @@ umask 077
 
 repository_url='https://github.com/Jerry2586/APPGOG.git'
 repository_ref=${APPGOG_REF:-main}
-installer_revision='2026-09-02.1'
+installer_revision='2026-09-02.2'
 install_directory=${APPGOG_DIR:-/opt/APPGOG}
 site_origin=${APPGOG_ORIGIN:-}
 admin_email=${APPGOG_ADMIN_EMAIL:-admin@appgog.local}
@@ -268,7 +268,7 @@ deploy_application() {
   log '启动数据库、Redis、迁移、API 和 Web。'
   docker compose up -d --wait --wait-timeout 300
   log '检查 API 和 Web 就绪状态。'
-  docker compose exec -T api wget --no-verbose --tries=10 --spider http://localhost:3000/api/v1/health/ready
+  docker compose exec -T api wget --no-verbose --tries=10 --spider http://127.0.0.1:3000/api/v1/health/ready
   curl --fail --silent --show-error --retry 10 --retry-delay 2 "http://127.0.0.1:$web_port/api/v1/health/ready" >/dev/null
   docker compose ps
   completed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)

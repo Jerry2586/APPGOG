@@ -499,7 +499,7 @@ app.example.com {
 ```sh
 docker compose config --quiet
 docker compose ps
-docker compose exec -T api wget --no-verbose --tries=3 --spider http://localhost:3000/api/v1/health/ready
+docker compose exec -T api wget --no-verbose --tries=3 --spider http://127.0.0.1:3000/api/v1/health/ready
 docker compose logs --tail=100 api
 docker compose logs --tail=100 web
 ```
@@ -578,7 +578,7 @@ docker compose config --quiet
 docker compose build --pull
 docker compose up -d
 docker compose ps
-docker compose exec -T api wget --no-verbose --tries=10 --spider http://localhost:3000/api/v1/health/ready
+docker compose exec -T api wget --no-verbose --tries=10 --spider http://127.0.0.1:3000/api/v1/health/ready
 ```
 
 `init` 服务会执行正式迁移。升级完成后再次跑第 9 节验收。

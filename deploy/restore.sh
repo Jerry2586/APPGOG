@@ -25,5 +25,5 @@ docker compose exec -T postgres pg_restore \
 docker compose run --rm init
 docker compose start api
 trap - EXIT HUP INT TERM
-docker compose exec -T api wget --no-verbose --tries=10 --spider http://localhost:3000/api/v1/health/ready
+docker compose exec -T api wget --no-verbose --tries=10 --spider http://127.0.0.1:3000/api/v1/health/ready
 printf '%s\n' "APPGOG 数据库恢复完成；恢复前快照：$pre_restore"

@@ -19,6 +19,8 @@ for (const name of ['init', 'api', 'web', 'postgres', 'redis']) {
 }
 required(service('init'), /prisma migrate deploy[\s\S]*dist\/prisma\/seed\.js/, '部署初始化未按迁移后种子的固定顺序执行');
 for (const [pattern, message] of [[/3000:3000/, 'API 未固定公开 3000 端口'], [/health\/ready/, 'API 容器未使用数据库就绪检查'], [/service_completed_successfully/, 'API 未等待迁移与种子初始化完成']]) required(service('api'), pattern, message);
+required(service('api'), /http:\/\/127\.0\.0\.1:3000\/api\/v1\/health\/ready/, 'API 健康探针未固定 IPv4 回环地址，可能因 localhost 解析为 IPv6 而误报');
+forbidden(service('api'), /http:\/\/localhost:3000\/api\/v1\/health\/ready/, 'API 健康探针不得使用可能解析为 IPv6 的 localhost');
 required(compose, /DATABASE_URL:\s*"postgresql:\/\/appgog:\$\{APPGOG_DB_PASSWORD:[^}]+\}@postgres:5432\/appgog"/, '容器数据库地址未固定到独立 postgres 服务或未强制密码');
 required(compose, /JWT_SECRET:\s*"\$\{JWT_SECRET:\?/, 'Compose 未拒绝缺失的 JWT_SECRET');
 required(compose, /appgog_private:[\s\S]*internal:\s*true/, '数据库网络不是内部私有网络');
