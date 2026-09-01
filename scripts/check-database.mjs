@@ -11,6 +11,7 @@ const migrationSql = readdirSync(migrationsPath, { withFileTypes: true })
   .sort((a, b) => a.name.localeCompare(b.name))
   .map(entry => readFileSync(join(migrationsPath.pathname.replace(/^\/(.:\/)/, '$1'), entry.name, 'migration.sql'), 'utf8'))
   .join('\n');
+const stage3Migration = readFileSync(new URL('../apps/api/prisma/migrations/20260829030000_stage3_data_model/migration.sql', import.meta.url), 'utf8');
 
 const failures = [];
 const requirePattern = (text, pattern, message) => {
@@ -58,6 +59,8 @@ for (const [pattern, message] of [
 
 if (/ChangeMe|ADMIN_INITIAL_PASSWORD\s*\|\|/i.test(seed)) failures.push('种子脚本存在弱口令回退');
 requirePattern(seed, /ADMIN_INITIAL_PASSWORD/, '种子脚本未强制首次管理员密码');
+requirePattern(stage3Migration, /BEGIN;[\s\S]*ALTER TABLE "Category" DROP CONSTRAINT "Category_slug_key";[\s\S]*COMMIT;/, '第 3 阶段迁移没有在事务内正确删除分类唯一约束');
+if (/DROP INDEX "Category_slug_key"/.test(stage3Migration)) failures.push('第 3 阶段迁移错误地删除唯一约束的底层索引');
 
 if (failures.length) {
   console.error('APPGOG 数据库基线检查失败：\n' + failures.map(item => `- ${item}`).join('\n'));

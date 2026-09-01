@@ -1,6 +1,8 @@
 -- Stage 3: promote the prototype schema to the isolated APPGOG production data model.
 -- All existing APPGOG rows are preserved or explicitly transformed. No Xboard table is read or created.
 
+BEGIN;
+
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 
@@ -180,7 +182,7 @@ FOR EACH ROW EXECUTE FUNCTION appgog_reject_version_update();
 
 -- Categorisation is scoped so CMS and independent products cannot silently share namespaces.
 ALTER TABLE "Category" DROP CONSTRAINT "Category_parentId_fkey";
-DROP INDEX "Category_slug_key";
+ALTER TABLE "Category" DROP CONSTRAINT "Category_slug_key";
 ALTER TABLE "Category"
   ADD COLUMN "scope" "CategoryScope" NOT NULL DEFAULT 'CONTENT',
   ADD COLUMN "description" TEXT,
@@ -495,3 +497,5 @@ FOR EACH ROW EXECUTE FUNCTION appgog_reject_audit_mutation();
 
 DROP TABLE "User";
 DROP TYPE "UserRole";
+
+COMMIT;

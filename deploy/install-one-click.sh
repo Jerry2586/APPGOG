@@ -4,12 +4,14 @@ umask 077
 
 repository_url='https://github.com/Jerry2586/APPGOG.git'
 repository_ref=${APPGOG_REF:-main}
+installer_revision='2026-09-02.1'
 install_directory=${APPGOG_DIR:-/opt/APPGOG}
 site_origin=${APPGOG_ORIGIN:-}
 admin_email=${APPGOG_ADMIN_EMAIL:-admin@appgog.local}
 admin_password=${APPGOG_ADMIN_PASSWORD:-}
 web_port=${APPGOG_WEB_PORT:-8080}
 panel=${APPGOG_PANEL:-ssh}
+resume_install=false
 
 log() { printf '%s\n' "[APPGOG] $*"; }
 fail() { printf '%s\n' "[APPGOG] 错误：$*" >&2; exit 1; }
@@ -43,6 +45,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ "$(id -u)" -eq 0 ] || fail '请使用 root 或 sudo 运行。'
+log "服务器一键安装脚本版本：$installer_revision"
 case "$repository_ref" in *[!A-Za-z0-9._/-]*|'') fail 'APPGOG_REF 含非法字符。' ;; esac
 case "$install_directory" in /*) ;; *) fail 'APPGOG_DIR 必须是绝对路径。' ;; esac
 case "$install_directory" in /|/opt|/usr|/var|/root|/home) fail 'APPGOG_DIR 不能指向系统根目录或宽泛目录。' ;; esac
@@ -154,8 +157,12 @@ ensure_docker() {
 prepare_source() {
   if [ -e "$install_directory" ] && [ -n "$(find "$install_directory" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
     [ -d "$install_directory/.git" ] || fail "目标目录非空且不是 Git 仓库：$install_directory"
-    [ ! -e "$install_directory/.env" ] || fail '检测到现有 .env，拒绝覆盖或重复安装。'
     [ ! -e "$install_directory/.appgog-install-state.json" ] || fail '检测到安装完成状态，拒绝重复安装。'
+    if [ -e "$install_directory/.env" ]; then
+      grep -qx 'APPGOG_INSTALL_MANAGED=true' "$install_directory/.env" || fail '检测到非一键脚本管理的 .env，拒绝覆盖。'
+      [ "$(stat -c '%u:%a' "$install_directory/.env")" = '0:600' ] || fail '已有 .env 必须由 root 拥有且权限为 0600。'
+      resume_install=true
+    fi
     current_remote=$(git -C "$install_directory" remote get-url origin 2>/dev/null || true)
     [ "$current_remote" = "$repository_url" ] || fail '现有目录的 Git 远程地址不是 APPGOG 官方仓库。'
     working_tree_status=$(git -C "$install_directory" status --porcelain)
@@ -177,6 +184,19 @@ prepare_source() {
 }
 
 write_environment() {
+  if [ "$resume_install" = true ]; then
+    existing_origin=$(sed -n 's/^APP_ORIGIN=//p' "$install_directory/.env" | tail -n 1)
+    existing_email=$(sed -n 's/^ADMIN_EMAIL=//p' "$install_directory/.env" | tail -n 1)
+    existing_port=$(sed -n 's/^APPGOG_WEB_PORT=//p' "$install_directory/.env" | tail -n 1)
+    existing_password=$(sed -n 's/^ADMIN_INITIAL_PASSWORD=//p' "$install_directory/.env" | tail -n 1)
+    [ "$existing_origin" = "$site_origin" ] || fail '恢复安装时 --origin 必须与已有 .env 一致。'
+    [ "$existing_email" = "$admin_email" ] || fail '恢复安装时 --email 必须与已有 .env 一致。'
+    [ "$existing_port" = "$web_port" ] || fail '恢复安装时 --port 必须与已有 .env 一致。'
+    admin_password=$existing_password
+    validate_password "$admin_password"
+    log '检测到由一键脚本生成但尚未完成的配置，将安全恢复安装。'
+    return
+  fi
   database_password=$(openssl rand -hex 30)
   jwt_secret=$(openssl rand -hex 48)
   if [ -z "$admin_password" ]; then admin_password="Zx7!$(openssl rand -hex 18)"; fi
@@ -216,12 +236,35 @@ write_environment() {
   trap - EXIT HUP INT TERM
 }
 
+recover_known_empty_stage3_failure() {
+  [ "$resume_install" = true ] || return
+  log '检查未完成安装的数据库迁移状态。'
+  docker compose up -d postgres redis
+  attempts=0
+  until docker compose exec -T postgres pg_isready -U appgog -d appgog >/dev/null 2>&1; do
+    attempts=$((attempts + 1))
+    [ "$attempts" -lt 30 ] || fail '恢复安装时 PostgreSQL 未在 150 秒内就绪。'
+    sleep 5
+  done
+  migration_state=$(docker compose exec -T postgres psql -U appgog -d appgog -At -v ON_ERROR_STOP=1 -c \
+    "SELECT CASE WHEN EXISTS (SELECT 1 FROM \"_prisma_migrations\" WHERE migration_name = '20260829030000_stage3_data_model' AND finished_at IS NULL AND rolled_back_at IS NULL) AND NOT EXISTS (SELECT 1 FROM \"_prisma_migrations\" WHERE migration_name NOT IN ('20260829000000_init', '20260829030000_stage3_data_model') AND finished_at IS NOT NULL) THEN 'recoverable' ELSE 'other' END" 2>/dev/null || printf '%s' 'other')
+  [ "$migration_state" = recoverable ] || return
+  business_data=$(docker compose exec -T postgres psql -U appgog -d appgog -At -v ON_ERROR_STOP=1 -c \
+    'SELECT CASE WHEN EXISTS (SELECT 1 FROM "User") OR EXISTS (SELECT 1 FROM "Page") OR EXISTS (SELECT 1 FROM "Category") OR EXISTS (SELECT 1 FROM "Content") OR EXISTS (SELECT 1 FROM "KnowledgeChunk") OR EXISTS (SELECT 1 FROM "Product") OR EXISTS (SELECT 1 FROM "Theme") OR EXISTS (SELECT 1 FROM "ThemeSchedule") OR EXISTS (SELECT 1 FROM "MarketingCampaign") OR EXISTS (SELECT 1 FROM "GlobalSetting") OR EXISTS (SELECT 1 FROM "PluginSnippet") OR EXISTS (SELECT 1 FROM "AuditLog") THEN '\''present'\'' ELSE '\''empty'\'' END' 2>/dev/null || printf '%s' 'unknown')
+  [ "$business_data" = empty ] || fail '已知迁移失败库中存在业务数据或无法确认空库，拒绝自动恢复。'
+  log '确认仅存在已知的第 3 阶段失败记录且业务表为空；重建 APPGOG 空 schema 后继续。'
+  docker compose rm -sf init api web >/dev/null 2>&1 || true
+  docker compose exec -T postgres psql -U appgog -d appgog -v ON_ERROR_STOP=1 -c \
+    'DROP SCHEMA public CASCADE; CREATE SCHEMA public AUTHORIZATION appgog; GRANT ALL ON SCHEMA public TO public;' >/dev/null
+}
+
 deploy_application() {
   cd "$install_directory"
   log '验证 Docker Compose 配置。'
   docker compose config --quiet
   log '构建 APPGOG 镜像，首次执行可能需要数分钟。'
   docker compose build --pull
+  recover_known_empty_stage3_failure
   log '启动数据库、Redis、迁移、API 和 Web。'
   docker compose up -d --wait --wait-timeout 300
   log '检查 API 和 Web 就绪状态。'
