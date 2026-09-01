@@ -44,7 +44,7 @@ services:
       context: .
       dockerfile: Dockerfile.api
     environment: *api-environment
-    ports: ["3000:3000"]
+    ports: ["127.0.0.1:3000:3000"]
     depends_on:
       init: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
@@ -61,9 +61,26 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.web
-    ports: ["${APPGOG_WEB_PORT:-8080}:80"]
+    ports: ["127.0.0.1:${APPGOG_WEB_PORT:-8080}:80"]
     depends_on:
       api: { condition: service_healthy }
+    restart: unless-stopped
+    networks: [appgog_edge]
+  gateway:
+    image: caddy:2.11.4-alpine
+    profiles: ["gateway"]
+    environment:
+      APPGOG_DOMAIN: "${APPGOG_DOMAIN:-localhost}"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - "./deploy/caddy:/etc/caddy:ro"
+      - "appgog_caddy_data:/data"
+      - "appgog_caddy_config:/config"
+    depends_on:
+      web: { condition: service_started }
     restart: unless-stopped
     networks: [appgog_edge]
   postgres:
@@ -95,6 +112,8 @@ volumes:
   appgog_pg:
   appgog_redis:
   appgog_media:
+  appgog_caddy_data:
+  appgog_caddy_config:
 networks:
   appgog_edge:
     name: appgog_edge

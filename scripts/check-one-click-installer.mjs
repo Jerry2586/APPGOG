@@ -23,6 +23,7 @@ required(installer, /mktemp "\$install_directory\/\.env\.tmp\.[X]+"[\s\S]*chmod 
 required(installer, /docker compose config --quiet[\s\S]*docker compose build --pull[\s\S]*docker compose up -d --wait --wait-timeout 300/, '一键脚本没有直接验证、构建并启动 Compose 服务');
 required(installer, /api\/v1\/health\/ready[\s\S]*"status": "completed"/, '一键脚本没有完成健康检查或写入完成状态');
 required(installer, /后台地址：[\s\S]*管理员账号：[\s\S]*初始密码：/, '一键脚本成功后没有显示后台地址和管理员凭据');
+for (const pattern of [/APPGOG_DOMAIN=/, /COMPOSE_PROFILES=gateway/, /--resolve "\$origin_host:443:127\.0\.0\.1"/, /HTTPS 网关/]) required(installer, pattern, '服务器一键脚本没有自动启用并验证 HTTPS 网关');
 required(installer, /APPGOG_INSTALL_MANAGED=true[\s\S]*root 拥有且权限为 0600[\s\S]*recover_known_empty_stage3_failure/, '一键脚本不能安全恢复自己创建的未完成安装');
 required(installer, /20260829030000_stage3_data_model[\s\S]*business_data[\s\S]*DROP SCHEMA public CASCADE/, '一键脚本缺少已知空库迁移失败的受限恢复流程');
 required(installer, /resume_install" != true \]; then return 0[\s\S]*migration_state" != recoverable \]; then[\s\S]*return 0/, '一键脚本的无需恢复分支可能在 set -e 下错误退出');

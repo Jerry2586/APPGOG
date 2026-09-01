@@ -34,7 +34,7 @@ sudo sh /tmp/appgog-install.sh --origin https://你的正式域名 --email 你�
 
 脚本固定从 `https://github.com/Jerry2586/APPGOG.git` 获取 `main`。已有 Docker 时只验证；缺少 Docker 时使用官方软件源安装。成功后终端直接显示官网地址、后台地址、管理员账号、初始密码和本机 Web 上游。脚本不覆盖已有 `.env`、完成状态、非官方仓库或有本地改动的源码目录，也不删除容器或数据卷。
 
-正式域名的 HTTPS 证书和反向代理属于服务器入口配置，可使用服务器已有的 Nginx、Caddy 或其他网关完成，不要求进入任何面板安装 APPGOG。默认 Web 上游为 `http://127.0.0.1:8080`；不要向公网开放 3000、5432、6379。
+服务器一键安装会启用可选的 Caddy gateway profile，自动签发/续期 HTTPS 证书并开放 80/443；API 与 Web 上游只绑定本机。使用服务器已有的 Nginx、Caddy 或面板代理时，不启用该 profile 即可，APPGOG 仍不要求进入任何面板安装。默认 Web 上游为 `http://127.0.0.1:8080`；不要向公网开放 3000、8080、5432、6379。
 
 ## 可选 Web 安装向导
 

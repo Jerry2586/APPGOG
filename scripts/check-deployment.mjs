@@ -9,16 +9,18 @@ const dockerEnv = read('.env.docker.example');
 const backup = read('deploy/backup.sh');
 const restore = read('deploy/restore.sh');
 const drill = read('deploy/backup-restore-drill.sh');
+const caddy = read('deploy/caddy/Caddyfile');
+const httpsInstaller = read('deploy/enable-https.sh');
 const failures = [];
 const required = (text, pattern, message) => { if (!pattern.test(text)) failures.push(message); };
 const forbidden = (text, pattern, message) => { if (pattern.test(text)) failures.push(message); };
 const service = name => compose.match(new RegExp(`^  ${name}:\\r?\\n[\\s\\S]*?(?=^  [a-z][a-z0-9_-]*:\\r?\\n|^volumes:)`, 'm'))?.[0] ?? '';
 
-for (const name of ['init', 'api', 'web', 'postgres', 'redis']) {
+for (const name of ['init', 'api', 'web', 'gateway', 'postgres', 'redis']) {
   if (!service(name)) failures.push(`Compose 缺少 ${name} 服务`);
 }
 required(service('init'), /prisma migrate deploy[\s\S]*dist\/prisma\/seed\.js/, '部署初始化未按迁移后种子的固定顺序执行');
-for (const [pattern, message] of [[/3000:3000/, 'API 未固定公开 3000 端口'], [/health\/ready/, 'API 容器未使用数据库就绪检查'], [/service_completed_successfully/, 'API 未等待迁移与种子初始化完成']]) required(service('api'), pattern, message);
+for (const [pattern, message] of [[/127\.0\.0\.1:3000:3000/, 'API 未固定到本机 3000 端口'], [/health\/ready/, 'API 容器未使用数据库就绪检查'], [/service_completed_successfully/, 'API 未等待迁移与种子初始化完成']]) required(service('api'), pattern, message);
 required(service('api'), /http:\/\/127\.0\.0\.1:3000\/api\/v1\/health\/ready/, 'API 健康探针未固定 IPv4 回环地址，可能因 localhost 解析为 IPv6 而误报');
 forbidden(service('api'), /http:\/\/localhost:3000\/api\/v1\/health\/ready/, 'API 健康探针不得使用可能解析为 IPv6 的 localhost');
 required(compose, /DATABASE_URL:\s*"postgresql:\/\/appgog:\$\{APPGOG_DB_PASSWORD:[^}]+\}@postgres:5432\/appgog"/, '容器数据库地址未固定到独立 postgres 服务或未强制密码');
@@ -28,6 +30,10 @@ forbidden(service('postgres'), /^    ports:/m, 'PostgreSQL 不得暴露宿主机
 forbidden(service('redis'), /^    ports:/m, 'Redis 不得暴露宿主机端口');
 forbidden(compose, /\b(?:xboard|x-board)\b/i, 'APPGOG Compose 不得连接或编排 Xboard');
 forbidden(compose, /POSTGRES_PASSWORD:\s*appgog\b/, 'Compose 仍使用弱默认数据库密码');
+required(service('web'), /127\.0\.0\.1:\$\{APPGOG_WEB_PORT:-8080\}:80/, 'Web 上游未限制到本机回环地址');
+for (const [pattern, message] of [[/caddy:2\.11\.4-alpine/, 'HTTPS 网关未固定官方 Caddy 镜像版本'], [/profiles:\s*\["gateway"\]/, 'HTTPS 网关没有使用可选 profile'], [/"80:80"[\s\S]*"443:443"[\s\S]*"443:443\/udp"/, 'HTTPS 网关未提供 HTTP、HTTPS 与 HTTP\/3 端口'], [/appgog_caddy_data:\/data/, 'HTTPS 证书没有持久化数据卷']]) required(service('gateway'), pattern, message);
+required(caddy, /\{\$APPGOG_DOMAIN\}[\s\S]*reverse_proxy web:80/, 'Caddy 未按正式域名代理到内部 Web 服务');
+required(httpsInstaller, /APPGOG_INSTALL_MANAGED=true[\s\S]*APPGOG_DOMAIN[\s\S]*COMPOSE_PROFILES=gateway[\s\S]*--resolve/, 'HTTPS 启用脚本缺少配置保护、gateway profile 或证书验证');
 required(apiImage, /USER node[\s\S]*CMD \["node","apps\/api\/dist\/src\/main\.js"\]/, 'API 运行镜像未使用非 root 用户或启动入口错误');
 required(webImage, /nginx:1\.27-alpine[\s\S]*deploy\/nginx\.conf/, 'Web 运行镜像或反向代理配置未固定');
 for (const header of ['X-Content-Type-Options', 'Content-Security-Policy', 'Permissions-Policy', 'X-Frame-Options']) required(nginx, new RegExp(header), `Nginx 缺少 ${header} 安全头`);

@@ -110,7 +110,8 @@ sudo sh /tmp/appgog-install.sh --origin https://你的正式域名 --email 你�
 5. 生成数据库密码、JWT 密钥和管理员初始密码，以 `0600` 权限原子写入 `.env`。
 6. 直接验证、构建并启动 Docker Compose，自动执行数据库迁移和管理员种子。
 7. 检查 API 与 Web 健康状态，写入安装完成状态。
-8. 在当前终端显示官网地址、后台地址、管理员账号、初始密码和本机 Web 上游。
+8. 启用可选 Caddy gateway profile，自动签发并续期正式域名的 HTTPS 证书，只向公网开放 80/443。
+9. 在当前终端显示官网地址、后台地址、管理员账号、初始密码和本机 Web 上游。
 
 脚本只允许首次安装：已有 `.env`、安装状态、非官方仓库或存在真实内容修改时都会拒绝覆盖。旧版脚本曾对 `deploy/*.sh` 执行 `chmod`；新版只会识别并忽略这种纯权限位变化，不会忽略任何内容修改。它不会删除现有 Docker 包、容器或数据卷，也不会自动修改面板网站、证书、防火墙和云安全组。APPGOG 与 Xboard 完全隔离，一键脚本不接收 Xboard 数据库、API、Token、Cookie 或账号配置。
 
@@ -122,7 +123,7 @@ sudo sh /tmp/appgog-install.sh --origin https://你的正式域名 --email 你�
 sudo APPGOG_DIR=/data/APPGOG APPGOG_REF=main sh /tmp/appgog-install.sh --origin https://你的正式域名 --email 你的管理员邮箱
 ```
 
-生产安装不要直接把远程脚本通过管道交给 Shell；应先下载并核对。该脚本在服务器终端内完成部署，不启动 Node.js 安装服务、不监听 3099，也不需要 SSH 隧道。安装成功后，可用 Nginx、Caddy 或任意面板把正式 HTTPS 域名反向代理到终端显示的 `http://127.0.0.1:端口`；这只是域名入口配置，不是安装步骤。
+生产安装不要直接把远程脚本通过管道交给 Shell；应先下载并核对。该脚本在服务器终端内完成部署，不启动 Node.js 安装服务、不监听 3099，也不需要 SSH 隧道。纯服务器一键安装会自动启动 Caddy HTTPS 网关；已有 Nginx/Caddy/面板入口的手动部署默认不启用 gateway profile，可继续代理到 `http://127.0.0.1:端口`。
 
 ### 3.1 可选：启动 Web 安装向导
 

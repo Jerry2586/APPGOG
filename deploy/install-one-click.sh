@@ -4,7 +4,7 @@ umask 077
 
 repository_url='https://github.com/Jerry2586/APPGOG.git'
 repository_ref=${APPGOG_REF:-main}
-installer_revision='2026-09-02.3'
+installer_revision='2026-09-02.4'
 install_directory=${APPGOG_DIR:-/opt/APPGOG}
 site_origin=${APPGOG_ORIGIN:-}
 admin_email=${APPGOG_ADMIN_EMAIL:-admin@appgog.local}
@@ -59,7 +59,7 @@ fi
 
 case "$site_origin" in https://*) ;; *) fail '正式地址必须以 https:// 开头。' ;; esac
 origin_host=${site_origin#https://}
-case "$origin_host" in ''|*/*|*'?'*|*'#'*|*'@'*|*[!A-Za-z0-9.:-]*) fail '正式地址只能包含 HTTPS 主机名和可选端口，不能带路径、凭据、参数或片段。' ;; esac
+case "$origin_host" in ''|*/*|*'?'*|*'#'*|*'@'*|*:*|*[!A-Za-z0-9.-]*) fail '正式地址只能包含 HTTPS 域名，不能带端口、路径、凭据、参数或片段。' ;; esac
 case "$admin_email" in *@*.*) ;; *) fail '管理员邮箱格式错误。' ;; esac
 case "$admin_email" in *[!A-Za-z0-9._+@-]*) fail '管理员邮箱包含不支持的字符。' ;; esac
 case "$web_port" in ''|*[!0-9]*) fail 'Web 端口必须是整数。' ;; esac
@@ -189,11 +189,23 @@ write_environment() {
     existing_email=$(sed -n 's/^ADMIN_EMAIL=//p' "$install_directory/.env" | tail -n 1)
     existing_port=$(sed -n 's/^APPGOG_WEB_PORT=//p' "$install_directory/.env" | tail -n 1)
     existing_password=$(sed -n 's/^ADMIN_INITIAL_PASSWORD=//p' "$install_directory/.env" | tail -n 1)
+    existing_domain=$(sed -n 's/^APPGOG_DOMAIN=//p' "$install_directory/.env" | tail -n 1)
     [ "$existing_origin" = "$site_origin" ] || fail '恢复安装时 --origin 必须与已有 .env 一致。'
     [ "$existing_email" = "$admin_email" ] || fail '恢复安装时 --email 必须与已有 .env 一致。'
     [ "$existing_port" = "$web_port" ] || fail '恢复安装时 --port 必须与已有 .env 一致。'
     admin_password=$existing_password
     validate_password "$admin_password"
+    if [ -z "$existing_domain" ]; then
+      environment_tmp=$(mktemp "$install_directory/.env.gateway.XXXXXX")
+      trap 'rm -f "$environment_tmp"' EXIT HUP INT TERM
+      cp "$install_directory/.env" "$environment_tmp"
+      printf 'APPGOG_DOMAIN=%s\n' "$origin_host" >> "$environment_tmp"
+      chmod 600 "$environment_tmp"
+      mv "$environment_tmp" "$install_directory/.env"
+      trap - EXIT HUP INT TERM
+    else
+      [ "$existing_domain" = "$origin_host" ] || fail '恢复安装时 APPGOG_DOMAIN 与 --origin 不一致。'
+    fi
     log '检测到由一键脚本生成但尚未完成的配置，将安全恢复安装。'
     return
   fi
@@ -208,6 +220,7 @@ write_environment() {
     printf '%s\n' 'APPGOG_INSTALL_MANAGED=true'
     printf 'APPGOG_PANEL=%s\n' "$panel"
     printf 'APPGOG_WEB_PORT=%s\n' "$web_port"
+    printf 'APPGOG_DOMAIN=%s\n' "$origin_host"
     printf 'APPGOG_DB_PASSWORD=%s\n' "$database_password"
     printf 'JWT_SECRET=%s\n' "$jwt_secret"
     printf '%s\n' 'ADMIN_REFRESH_TTL_DAYS=7'
@@ -273,6 +286,15 @@ deploy_application() {
   log '检查 API 和 Web 就绪状态。'
   docker compose exec -T api wget --no-verbose --tries=10 --spider http://127.0.0.1:3000/api/v1/health/ready
   curl --fail --silent --show-error --retry 10 --retry-delay 2 "http://127.0.0.1:$web_port/api/v1/health/ready" >/dev/null
+  attempts=0
+  until curl --fail --silent --show-error --resolve "$origin_host:443:127.0.0.1" "https://$origin_host/api/v1/health/ready" >/dev/null 2>&1; do
+    attempts=$((attempts + 1))
+    if [ "$attempts" -ge 36 ]; then
+      docker compose logs --no-color --tail=120 gateway >&2 || true
+      fail '公网 HTTPS 网关未在 180 秒内就绪；请确认域名解析及 TCP 80/443 入站规则。'
+    fi
+    sleep 5
+  done
   docker compose ps
   completed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   state_tmp=$(mktemp "$install_directory/.appgog-install-state.tmp.XXXXXX")
@@ -293,6 +315,8 @@ install_base_tools
 ensure_docker
 prepare_source
 write_environment
+COMPOSE_PROFILES=gateway
+export COMPOSE_PROFILES
 deploy_application
 
 printf '\n%s\n' '================ APPGOG 安装完成 ================'
@@ -302,6 +326,6 @@ printf '管理员账号：%s\n' "$admin_email"
 printf '初始密码：%s\n' "$admin_password"
 printf 'Web 上游：http://127.0.0.1:%s\n' "$web_port"
 printf '%s\n' '请立即保存以上信息，登录后台后修改初始密码。'
-printf '%s\n' '如果正式域名尚未接入，请把服务器现有 HTTPS 入口反向代理到上述 Web 上游。'
+printf '%s\n' 'Caddy 已自动配置 HTTPS 和证书续期；证书数据保存在独立 Docker 数据卷。'
 printf '%s\n' '3000、5432、6379 不得向公网开放。'
 printf '%s\n' '=================================================='
