@@ -5,41 +5,75 @@ umask 077
 repository_url='https://github.com/Jerry2586/APPGOG.git'
 repository_ref=${APPGOG_REF:-main}
 install_directory=${APPGOG_DIR:-/opt/APPGOG}
-runtime_directory=${APPGOG_RUNTIME_DIR:-/opt/appgog-runtime}
+site_origin=${APPGOG_ORIGIN:-}
+admin_email=${APPGOG_ADMIN_EMAIL:-admin@appgog.local}
+admin_password=${APPGOG_ADMIN_PASSWORD:-}
+web_port=${APPGOG_WEB_PORT:-8080}
+panel=${APPGOG_PANEL:-ssh}
 
 log() { printf '%s\n' "[APPGOG] $*"; }
 fail() { printf '%s\n' "[APPGOG] 错误：$*" >&2; exit 1; }
 
 usage() {
   printf '%s\n' \
-    'APPGOG 一键引导安装' \
+    'APPGOG 服务器一键安装部署' \
     '' \
-    '用法：sudo sh install-one-click.sh' \
+    '用法：' \
+    '  sudo sh install-one-click.sh --origin https://app.example.com' \
     '' \
-    '可选环境变量：' \
-    '  APPGOG_DIR                 安装目录，默认 /opt/APPGOG' \
-    '  APPGOG_REF                 Git 分支或标签，默认 main' \
-    '  APPGOG_INSTALL_TOKEN       至少 20 位的一次性安装 Token' \
-    '  APPGOG_INSTALL_REMOTE=true 临时监听 0.0.0.0:3099；必须配合 HTTPS 和来源 IP 限制' \
+    '参数：' \
+    '  --origin URL   正式 HTTPS Origin；未传时在服务器终端询问' \
+    '  --email EMAIL  初始管理员邮箱，默认 admin@appgog.local' \
+    '  --port PORT    Web 端口，默认 8080' \
+    '  --help         显示帮助' \
     '' \
-    '脚本只用于首次安装。目标目录非空、已有 .env 或安装状态时会拒绝覆盖。'
+    '也可使用 APPGOG_ORIGIN、APPGOG_ADMIN_EMAIL、APPGOG_ADMIN_PASSWORD、' \
+    'APPGOG_WEB_PORT、APPGOG_DIR、APPGOG_REF 和 APPGOG_PANEL 环境变量。' \
+    '未提供管理员密码时自动生成，并仅在安装成功后显示。'
 }
 
-case "${1:-}" in
-  -h|--help) usage; exit 0 ;;
-  '') ;;
-  *) fail "未知参数：$1" ;;
-esac
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --origin) [ "$#" -ge 2 ] || fail '--origin 缺少值'; site_origin=$2; shift 2 ;;
+    --email) [ "$#" -ge 2 ] || fail '--email 缺少值'; admin_email=$2; shift 2 ;;
+    --port) [ "$#" -ge 2 ] || fail '--port 缺少值'; web_port=$2; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "未知参数：$1" ;;
+  esac
+done
 
 [ "$(id -u)" -eq 0 ] || fail '请使用 root 或 sudo 运行。'
 case "$repository_ref" in *[!A-Za-z0-9._/-]*|'') fail 'APPGOG_REF 含非法字符。' ;; esac
-case "$install_directory" in
-  /*) ;;
-  *) fail 'APPGOG_DIR 必须是绝对路径。' ;;
-esac
-case "$install_directory" in
-  /|/opt|/usr|/var|/root|/home) fail 'APPGOG_DIR 不能指向系统根目录或宽泛目录。' ;;
-esac
+case "$install_directory" in /*) ;; *) fail 'APPGOG_DIR 必须是绝对路径。' ;; esac
+case "$install_directory" in /|/opt|/usr|/var|/root|/home) fail 'APPGOG_DIR 不能指向系统根目录或宽泛目录。' ;; esac
+case "$panel" in bt|1panel|aapanel|docker|ssh) ;; *) fail 'APPGOG_PANEL 只能是 bt、1panel、aapanel、docker 或 ssh。' ;; esac
+
+if [ -z "$site_origin" ]; then
+  [ -r /dev/tty ] || fail '非交互执行必须通过 --origin 或 APPGOG_ORIGIN 提供正式地址。'
+  printf '%s' '请输入 APPGOG 正式 HTTPS 地址（例如 https://app.example.com）：' > /dev/tty
+  IFS= read -r site_origin < /dev/tty
+fi
+
+case "$site_origin" in https://*) ;; *) fail '正式地址必须以 https:// 开头。' ;; esac
+origin_host=${site_origin#https://}
+case "$origin_host" in ''|*/*|*'?'*|*'#'*|*'@'*|*[!A-Za-z0-9.:-]*) fail '正式地址只能包含 HTTPS 主机名和可选端口，不能带路径、凭据、参数或片段。' ;; esac
+case "$admin_email" in *@*.*) ;; *) fail '管理员邮箱格式错误。' ;; esac
+case "$admin_email" in *[!A-Za-z0-9._+@-]*) fail '管理员邮箱包含不支持的字符。' ;; esac
+case "$web_port" in ''|*[!0-9]*) fail 'Web 端口必须是整数。' ;; esac
+[ "$web_port" -ge 1024 ] && [ "$web_port" -le 65535 ] || fail 'Web 端口必须为 1024–65535。'
+case "$web_port" in 3000|5432|6379) fail 'Web 端口不能使用 3000、5432 或 6379。' ;; esac
+
+validate_password() {
+  value=$1
+  [ "${#value}" -ge 16 ] && [ "${#value}" -le 128 ] || fail '管理员密码必须为 16–128 位。'
+  case "$value" in *[!A-Za-z0-9._!@%+=:-]*) fail '自定义管理员密码只能使用字母、数字和 ._!@%+=:- 符号。' ;; esac
+  classes=0
+  case "$value" in *[a-z]*) classes=$((classes + 1)) ;; esac
+  case "$value" in *[A-Z]*) classes=$((classes + 1)) ;; esac
+  case "$value" in *[0-9]*) classes=$((classes + 1)) ;; esac
+  case "$value" in *[!A-Za-z0-9]*) classes=$((classes + 1)) ;; esac
+  [ "$classes" -ge 3 ] || fail '管理员密码必须包含大小写字母、数字和符号中的至少三类。'
+}
 
 os_id=''
 os_codename=''
@@ -53,22 +87,22 @@ fi
 install_base_tools() {
   if command -v apt-get >/dev/null 2>&1; then
     apt-get update
-    DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl git tar xz-utils
+    DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl git openssl
   elif command -v dnf >/dev/null 2>&1; then
-    dnf install -y ca-certificates curl git tar xz
+    dnf install -y ca-certificates curl git openssl
   elif command -v yum >/dev/null 2>&1; then
-    yum install -y ca-certificates curl git tar xz
+    yum install -y ca-certificates curl git openssl
   else
-    fail '不支持当前包管理器；请先安装 curl、git、tar、xz、ca-certificates、Docker Engine 和 Compose v2。'
+    fail '不支持当前包管理器；请先安装 curl、git、openssl、Docker Engine 和 Compose v2。'
   fi
 }
 
 install_docker_apt() {
-  case "$os_id" in ubuntu|debian) ;; *) fail "当前系统 $os_id 不支持自动安装 Docker；请通过 1Panel 或 Docker 官方文档安装。" ;; esac
+  case "$os_id" in ubuntu|debian) ;; *) fail "当前系统 $os_id 不支持自动安装 Docker；请通过面板或 Docker 官方文档安装。" ;; esac
   [ -n "$os_codename" ] || fail '无法识别系统代号，拒绝写入 Docker 软件源。'
   for conflicting in docker.io docker-compose docker-compose-v2 docker-doc docker-buildx podman-docker; do
     if dpkg-query -W -f='${Status}' "$conflicting" 2>/dev/null | grep -q 'install ok installed'; then
-      fail "检测到可能冲突的软件包 $conflicting；请按 Docker 官方文档处理后重试，脚本不会自动卸载现有软件。"
+      fail "检测到可能冲突的软件包 $conflicting；脚本不会自动卸载现有软件。"
     fi
   done
   install -m 0755 -d /etc/apt/keyrings
@@ -93,10 +127,7 @@ install_docker_apt() {
 }
 
 install_docker_rpm() {
-  case "$os_id" in
-    centos|rhel|fedora) docker_repo_os=$os_id ;;
-    *) fail "当前系统 $os_id 不支持自动安装 Docker；请通过 1Panel 或 Docker 官方文档安装。" ;;
-  esac
+  case "$os_id" in centos|rhel|fedora) docker_repo_os=$os_id ;; *) fail "当前系统 $os_id 不支持自动安装 Docker；请通过面板或 Docker 官方文档安装。" ;; esac
   if command -v dnf >/dev/null 2>&1; then
     dnf install -y dnf-plugins-core
     dnf config-manager --add-repo "https://download.docker.com/linux/$docker_repo_os/docker-ce.repo"
@@ -110,7 +141,7 @@ install_docker_rpm() {
 
 ensure_docker() {
   if command -v docker >/dev/null 2>&1; then
-    docker compose version >/dev/null 2>&1 || fail '已发现 Docker，但缺少 Compose v2；请先安装 docker-compose-plugin。'
+    docker compose version >/dev/null 2>&1 || fail '已发现 Docker，但缺少 Compose v2。'
   else
     log '未发现 Docker，准备从 Docker 官方软件源安装。'
     if command -v apt-get >/dev/null 2>&1; then install_docker_apt; else install_docker_rpm; fi
@@ -120,74 +151,107 @@ ensure_docker() {
   docker compose version >/dev/null 2>&1 || fail 'Docker Compose v2 不可用。'
 }
 
-node_major() {
-  "$1" -p "Number(process.versions.node.split('.')[0])" 2>/dev/null || printf '0\n'
-}
-
-ensure_node() {
-  if command -v node >/dev/null 2>&1 && [ "$(node_major "$(command -v node)")" -ge 22 ]; then
-    log "使用现有 $(node -v)。"
-    return
-  fi
-  case "$(uname -m)" in
-    x86_64|amd64) node_arch=x64 ;;
-    aarch64|arm64) node_arch=arm64 ;;
-    armv7l) node_arch=armv7l ;;
-    ppc64le) node_arch=ppc64le ;;
-    s390x) node_arch=s390x ;;
-    *) fail "Node.js 22 不支持当前架构：$(uname -m)" ;;
-  esac
-  log '从 nodejs.org 下载 Node.js 22 并校验 SHA-256。'
-  node_base='https://nodejs.org/dist/latest-v22.x'
-  node_tmp=$(mktemp -d)
-  trap 'rm -rf "$node_tmp"' EXIT HUP INT TERM
-  curl -fsSL "$node_base/SHASUMS256.txt" -o "$node_tmp/SHASUMS256.txt"
-  node_file=$(awk -v suffix="linux-$node_arch.tar.xz" '$2 ~ suffix "$" { print $2; exit }' "$node_tmp/SHASUMS256.txt")
-  [ -n "$node_file" ] || fail '官方校验清单中没有匹配的 Node.js 22 Linux 架构包。'
-  expected_hash=$(awk -v file="$node_file" '$2 == file { print $1; exit }' "$node_tmp/SHASUMS256.txt")
-  curl -fsSL "$node_base/$node_file" -o "$node_tmp/$node_file"
-  actual_hash=$(sha256sum "$node_tmp/$node_file" | awk '{ print $1 }')
-  [ "$actual_hash" = "$expected_hash" ] || fail 'Node.js 下载文件 SHA-256 校验失败。'
-  node_release=${node_file%.tar.xz}
-  install -m 0755 -d "$runtime_directory"
-  [ ! -e "$runtime_directory/$node_release" ] || fail "Node.js 目标目录已存在：$runtime_directory/$node_release"
-  tar -xJf "$node_tmp/$node_file" -C "$runtime_directory"
-  ln -sfn "$runtime_directory/$node_release" "$runtime_directory/current"
-  PATH="$runtime_directory/current/bin:$PATH"
-  export PATH
-  trap - EXIT HUP INT TERM
-  rm -rf "$node_tmp"
-  [ "$(node_major "$runtime_directory/current/bin/node")" -ge 22 ] || fail 'Node.js 22 安装验证失败。'
-}
-
 prepare_source() {
-  if [ -e "$install_directory" ]; then
-    [ -d "$install_directory" ] || fail "目标已存在且不是目录：$install_directory"
-    [ -z "$(find "$install_directory" -mindepth 1 -maxdepth 1 -print -quit)" ] || fail "目标目录非空，拒绝覆盖：$install_directory"
+  if [ -e "$install_directory" ] && [ -n "$(find "$install_directory" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+    [ -d "$install_directory/.git" ] || fail "目标目录非空且不是 Git 仓库：$install_directory"
+    [ ! -e "$install_directory/.env" ] || fail '检测到现有 .env，拒绝覆盖或重复安装。'
+    [ ! -e "$install_directory/.appgog-install-state.json" ] || fail '检测到安装完成状态，拒绝重复安装。'
+    current_remote=$(git -C "$install_directory" remote get-url origin 2>/dev/null || true)
+    [ "$current_remote" = "$repository_url" ] || fail '现有目录的 Git 远程地址不是 APPGOG 官方仓库。'
+    [ -z "$(git -C "$install_directory" status --porcelain)" ] || fail '现有源码目录有未提交修改，拒绝自动更新。'
+    log "安全更新现有 $install_directory。"
+    git -C "$install_directory" pull --ff-only origin "$repository_ref"
   else
-    install -m 0750 -d "$install_directory"
+    if [ ! -e "$install_directory" ]; then install -m 0750 -d "$install_directory"; fi
+    log "从 $repository_url 获取 $repository_ref。"
+    git clone --depth 1 --branch "$repository_ref" --single-branch "$repository_url" "$install_directory"
   fi
-  log "从 $repository_url 获取 $repository_ref。"
-  git clone --depth 1 --branch "$repository_ref" --single-branch "$repository_url" "$install_directory"
   [ -f "$install_directory/docker-compose.yml" ] || fail '仓库缺少 docker-compose.yml。'
-  [ -f "$install_directory/deploy/start-installer.sh" ] || fail '仓库缺少安装向导启动脚本。'
-  [ ! -e "$install_directory/.env" ] || fail '仓库中不应包含 .env。'
-  [ ! -e "$install_directory/.appgog-install-state.json" ] || fail '仓库中不应包含安装完成状态。'
+  [ -f "$install_directory/Dockerfile.api" ] || fail '仓库缺少 Dockerfile.api。'
+  [ -f "$install_directory/Dockerfile.web" ] || fail '仓库缺少 Dockerfile.web。'
   chmod 750 "$install_directory"/deploy/*.sh
+}
+
+write_environment() {
+  database_password=$(openssl rand -hex 30)
+  jwt_secret=$(openssl rand -hex 48)
+  if [ -z "$admin_password" ]; then admin_password="Zx7!$(openssl rand -hex 18)"; fi
+  validate_password "$admin_password"
+  environment_tmp=$(mktemp "$install_directory/.env.tmp.XXXXXX")
+  trap 'rm -f "$environment_tmp"' EXIT HUP INT TERM
+  {
+    printf '%s\n' '# 由 APPGOG 服务器一键安装脚本生成；禁止提交到版本库。'
+    printf '%s\n' 'APPGOG_INSTALL_MANAGED=true'
+    printf 'APPGOG_PANEL=%s\n' "$panel"
+    printf 'APPGOG_WEB_PORT=%s\n' "$web_port"
+    printf 'APPGOG_DB_PASSWORD=%s\n' "$database_password"
+    printf 'JWT_SECRET=%s\n' "$jwt_secret"
+    printf '%s\n' 'ADMIN_REFRESH_TTL_DAYS=7'
+    printf 'APP_ORIGIN=%s\n' "$site_origin"
+    printf 'ADMIN_ORIGIN=%s\n' "$site_origin"
+    printf 'ADMIN_EMAIL=%s\n' "$admin_email"
+    printf '%s\n' 'ADMIN_DISPLAY_NAME=APPGOG 管理员'
+    printf 'ADMIN_INITIAL_PASSWORD=%s\n' "$admin_password"
+    printf '%s\n' 'XBOARD_LOGIN_URL='
+    printf '%s\n' 'XBOARD_REGISTER_URL='
+    printf '%s\n' 'XBOARD_PURCHASE_URL='
+    printf '%s\n' 'XBOARD_DASHBOARD_URL='
+    printf '%s\n' 'XBOARD_TICKET_URL='
+    printf '%s\n' 'XBOARD_AFFILIATE_URL='
+    printf '%s\n' 'OPENAI_BASE_URL=https://api.openai.com/v1'
+    printf '%s\n' 'OPENAI_API_KEY='
+    printf '%s\n' 'OPENAI_CHAT_MODEL=gpt-4.1-mini'
+    printf '%s\n' 'OPENAI_EMBEDDING_MODEL=text-embedding-3-small'
+    printf '%s\n' 'AI_EXTERNAL_ENABLED=false'
+    printf '%s\n' 'AI_DAILY_MODEL_CALL_LIMIT=200'
+    printf '%s\n' 'AI_WORKER_ENABLED=true'
+    printf '%s\n' 'AI_TRUSTED_PROXY_IPS='
+  } > "$environment_tmp"
+  chmod 600 "$environment_tmp"
+  mv "$environment_tmp" "$install_directory/.env"
+  trap - EXIT HUP INT TERM
+}
+
+deploy_application() {
+  cd "$install_directory"
+  log '验证 Docker Compose 配置。'
+  docker compose config --quiet
+  log '构建 APPGOG 镜像，首次执行可能需要数分钟。'
+  docker compose build --pull
+  log '启动数据库、Redis、迁移、API 和 Web。'
+  docker compose up -d --wait --wait-timeout 300
+  log '检查 API 和 Web 就绪状态。'
+  docker compose exec -T api wget --no-verbose --tries=10 --spider http://localhost:3000/api/v1/health/ready
+  curl --fail --silent --show-error --retry 10 --retry-delay 2 "http://127.0.0.1:$web_port/api/v1/health/ready" >/dev/null
+  docker compose ps
+  completed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  state_tmp=$(mktemp "$install_directory/.appgog-install-state.tmp.XXXXXX")
+  {
+    printf '%s\n' '{'
+    printf '%s\n' '  "status": "completed",'
+    printf '  "panel": "%s",\n' "$panel"
+    printf '  "origin": "%s",\n' "$site_origin"
+    printf '  "webPort": %s,\n' "$web_port"
+    printf '  "updatedAt": "%s"\n' "$completed_at"
+    printf '%s\n' '}'
+  } > "$state_tmp"
+  chmod 600 "$state_tmp"
+  mv "$state_tmp" "$install_directory/.appgog-install-state.json"
 }
 
 install_base_tools
 ensure_docker
-ensure_node
 prepare_source
+write_environment
+deploy_application
 
-log "源码已安装到 $install_directory。"
-log '向导默认只监听 127.0.0.1:3099。请在本机另开终端建立：'
-log 'ssh -N -L 3099:127.0.0.1:3099 root@服务器IP'
-log '然后打开 http://127.0.0.1:3099/install/ 并使用终端显示的一次性 Token。'
-if [ "${APPGOG_INSTALL_REMOTE:-false}" = 'true' ]; then
-  log '警告：已启用远程模式；必须使用临时 HTTPS 反向代理并限制管理员来源 IP。'
-fi
-
-cd "$install_directory"
-exec sh deploy/start-installer.sh
+printf '\n%s\n' '================ APPGOG 安装完成 ================'
+printf '官网地址：%s\n' "$site_origin"
+printf '后台地址：%s/admin\n' "$site_origin"
+printf '管理员账号：%s\n' "$admin_email"
+printf '初始密码：%s\n' "$admin_password"
+printf 'Web 上游：http://127.0.0.1:%s\n' "$web_port"
+printf '%s\n' '请立即保存以上信息，登录后台后修改初始密码。'
+printf '%s\n' '如果正式域名尚未接入，请把服务器现有 HTTPS 入口反向代理到上述 Web 上游。'
+printf '%s\n' '3000、5432、6379 不得向公网开放。'
+printf '%s\n' '=================================================='

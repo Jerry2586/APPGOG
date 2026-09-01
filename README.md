@@ -22,7 +22,21 @@ APPGOG 是与 Xboard 业务解耦的可视化扩展运营平台。它提供 JSON
 
 生产部署应复制 `.env.docker.example` 为 `.env` 并填写全部必填密钥，然后执行 `docker compose config && docker compose build --pull && docker compose up -d`。Web 默认映射到 8080，API 固定映射到 3000；`init` 服务会先完成迁移和幂等种子，API 通过数据库就绪探针后才对 Web 提供服务。详细部署、备份和恢复步骤见 `docs/14-DEPLOYMENT-AND-ACCEPTANCE.md`。
 
-## 跨面板安装向导
+## 服务器一键安装
+
+在全新 Linux 服务器的命令行下载、检查并执行脚本；它直接完成 Docker 检查/安装、源码获取、随机密钥与管理员密码生成、数据库迁移、镜像构建、服务启动和健康检查，不进入 1Panel，也不启动 3099 网页向导：
+
+```sh
+curl -fsSLo /tmp/appgog-install.sh https://raw.githubusercontent.com/Jerry2586/APPGOG/main/deploy/install-one-click.sh
+less /tmp/appgog-install.sh
+sudo sh /tmp/appgog-install.sh --origin https://你的正式域名 --email 你的管理员邮箱
+```
+
+脚本固定从 `https://github.com/Jerry2586/APPGOG.git` 获取 `main`。已有 Docker 时只验证；缺少 Docker 时使用官方软件源安装。成功后终端直接显示官网地址、后台地址、管理员账号、初始密码和本机 Web 上游。脚本不覆盖已有 `.env`、完成状态、非官方仓库或有本地改动的源码目录，也不删除容器或数据卷。
+
+正式域名的 HTTPS 证书和反向代理属于服务器入口配置，可使用服务器已有的 Nginx、Caddy 或其他网关完成，不要求进入任何面板安装 APPGOG。默认 Web 上游为 `http://127.0.0.1:8080`；不要向公网开放 3000、5432、6379。
+
+## 可选 Web 安装向导
 
 APPGOG 提供独立的五步 Web 安装向导，支持宝塔、1Panel、aaPanel、标准 Docker 和纯 SSH Linux。它会完成安装 Token 校验、服务器预检、独立配置、隔离边界复核、固定 Compose 部署和 API 健康检查。默认只监听回环地址：
 
@@ -31,16 +45,6 @@ sh deploy/start-installer.sh
 ```
 
 Token 只保护一次性安装过程，不是 Xboard Token；安装器不接受 Xboard Token、API 或数据库配置。详细的 SSH 转发、各面板反向代理、安全远程模式和安装后检查见 [跨面板安装向导](docs/INSTALLATION-WIZARD.md)。
-
-从 GitHub 在全新 1Panel/Linux 服务器执行一键引导安装时，先下载并检查脚本：
-
-```sh
-curl -fsSLo /tmp/appgog-install.sh https://raw.githubusercontent.com/Jerry2586/APPGOG/main/deploy/install-one-click.sh
-less /tmp/appgog-install.sh
-sudo sh /tmp/appgog-install.sh
-```
-
-脚本固定从 `https://github.com/Jerry2586/APPGOG.git` 获取源码；已有 Docker 时只验证，缺少依赖时使用 Docker/Node.js 官方来源，Node 二进制执行 SHA-256 校验。非空目标目录和现有生产配置不会被覆盖。
 
 前台：http://localhost:5173/（首页数据路由为 `home`）  
 后台：http://localhost:5173/admin  

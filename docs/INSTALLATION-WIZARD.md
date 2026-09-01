@@ -91,36 +91,38 @@ chmod 750 deploy/start-installer.sh deploy/backup.sh deploy/restore.sh deploy/ba
 
 ## 3. 推荐安装流程（所有面板通用）
 
-### 3.0 GitHub 一键引导安装
+### 3.0 GitHub 服务器一键直装（推荐）
 
-目标仓库为 `https://github.com/Jerry2586/APPGOG`。全新服务器或 1Panel 主机可以先下载脚本、检查内容，再执行：
+目标仓库为 `https://github.com/Jerry2586/APPGOG`。在全新 Linux 服务器命令行下载脚本、检查内容并执行；不需要进入 1Panel，也不需要访问网页安装向导：
 
 ```sh
 curl -fsSLo /tmp/appgog-install.sh https://raw.githubusercontent.com/Jerry2586/APPGOG/main/deploy/install-one-click.sh
 less /tmp/appgog-install.sh
-sudo sh /tmp/appgog-install.sh
+sudo sh /tmp/appgog-install.sh --origin https://你的正式域名 --email 你的管理员邮箱
 ```
 
 这条入口会完成：
 
-1. 安装 `curl`、`git`、`tar`、`xz` 和 CA 证书等基础工具。
-2. 已有 Docker Engine 和 Compose v2 时只验证，不修改 1Panel 当前 Docker。
+1. 安装 `curl`、`git`、`openssl` 和 CA 证书等基础工具。
+2. 已有 Docker Engine 和 Compose v2 时只验证，不修改现有 Docker。
 3. 全新 Ubuntu、Debian、CentOS、RHEL 或 Fedora 缺少 Docker 时，从 Docker 官方软件源安装；其他发行版缺少 Docker 时安全停止，要求先通过面板或官方文档安装。
-4. 已有 Node.js 22+ 时直接使用；否则从 nodejs.org 的 `latest-v22.x` 下载对应架构的官方包并按 `SHASUMS256.txt` 校验。
-5. 把固定仓库的 `main` 分支浅克隆到 `/opt/APPGOG`。
-6. 启动本章后续说明的 Token 安装向导。
+4. 把固定仓库的 `main` 分支浅克隆到 `/opt/APPGOG`；若该目录正好是官方仓库、没有本地修改且尚未安装，则只执行快进更新。
+5. 生成数据库密码、JWT 密钥和管理员初始密码，以 `0600` 权限原子写入 `.env`。
+6. 直接验证、构建并启动 Docker Compose，自动执行数据库迁移和管理员种子。
+7. 检查 API 与 Web 健康状态，写入安装完成状态。
+8. 在当前终端显示官网地址、后台地址、管理员账号、初始密码和本机 Web 上游。
 
-脚本只允许首次安装：目标目录非空、仓库携带 `.env` 或安装状态文件时都会拒绝覆盖。它不会删除现有 Docker 包、容器或数据卷，也不会自动修改 1Panel 网站、证书、防火墙和云安全组。
+脚本只允许首次安装：已有 `.env`、安装状态、非官方仓库或存在本地修改时都会拒绝覆盖。它不会删除现有 Docker 包、容器或数据卷，也不会自动修改面板网站、证书、防火墙和云安全组。APPGOG 与 Xboard 完全隔离，一键脚本不接收 Xboard 数据库、API、Token、Cookie 或账号配置。
 
 如需改变安装目录或分支：
 
 ```sh
-APPGOG_DIR=/data/APPGOG APPGOG_REF=main sudo -E sh /tmp/appgog-install.sh
+sudo APPGOG_DIR=/data/APPGOG APPGOG_REF=main sh /tmp/appgog-install.sh --origin https://你的正式域名 --email 你的管理员邮箱
 ```
 
-生产安装不要直接把远程脚本通过管道交给 Shell；先下载并核对脚本，可以避免仓库内容在下载和执行之间不可见。脚本启动向导后仍应使用 SSH 隧道访问 3099。
+生产安装不要直接把远程脚本通过管道交给 Shell；应先下载并核对。该脚本在服务器终端内完成部署，不启动 Node.js 安装服务、不监听 3099，也不需要 SSH 隧道。安装成功后，可用 Nginx、Caddy 或任意面板把正式 HTTPS 域名反向代理到终端显示的 `http://127.0.0.1:端口`；这只是域名入口配置，不是安装步骤。
 
-### 3.1 启动安装向导
+### 3.1 可选：启动 Web 安装向导
 
 在服务器项目根目录运行：
 
