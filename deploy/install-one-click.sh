@@ -4,7 +4,7 @@ umask 077
 
 repository_url='https://github.com/Jerry2586/APPGOG.git'
 repository_ref=${APPGOG_REF:-main}
-installer_revision='2026-09-02.2'
+installer_revision='2026-09-02.3'
 install_directory=${APPGOG_DIR:-/opt/APPGOG}
 site_origin=${APPGOG_ORIGIN:-}
 admin_email=${APPGOG_ADMIN_EMAIL:-admin@appgog.local}
@@ -237,7 +237,7 @@ write_environment() {
 }
 
 recover_known_empty_stage3_failure() {
-  [ "$resume_install" = true ] || return
+  if [ "$resume_install" != true ]; then return 0; fi
   log '检查未完成安装的数据库迁移状态。'
   docker compose up -d postgres redis
   attempts=0
@@ -248,7 +248,10 @@ recover_known_empty_stage3_failure() {
   done
   migration_state=$(docker compose exec -T postgres psql -U appgog -d appgog -At -v ON_ERROR_STOP=1 -c \
     "SELECT CASE WHEN EXISTS (SELECT 1 FROM \"_prisma_migrations\" WHERE migration_name = '20260829030000_stage3_data_model' AND finished_at IS NULL AND rolled_back_at IS NULL) AND NOT EXISTS (SELECT 1 FROM \"_prisma_migrations\" WHERE migration_name NOT IN ('20260829000000_init', '20260829030000_stage3_data_model') AND finished_at IS NOT NULL) THEN 'recoverable' ELSE 'other' END" 2>/dev/null || printf '%s' 'other')
-  [ "$migration_state" = recoverable ] || return
+  if [ "$migration_state" != recoverable ]; then
+    log '没有需要自动恢复的已知空库迁移失败，继续现有安装。'
+    return 0
+  fi
   business_data=$(docker compose exec -T postgres psql -U appgog -d appgog -At -v ON_ERROR_STOP=1 -c \
     'SELECT CASE WHEN EXISTS (SELECT 1 FROM "User") OR EXISTS (SELECT 1 FROM "Page") OR EXISTS (SELECT 1 FROM "Category") OR EXISTS (SELECT 1 FROM "Content") OR EXISTS (SELECT 1 FROM "KnowledgeChunk") OR EXISTS (SELECT 1 FROM "Product") OR EXISTS (SELECT 1 FROM "Theme") OR EXISTS (SELECT 1 FROM "ThemeSchedule") OR EXISTS (SELECT 1 FROM "MarketingCampaign") OR EXISTS (SELECT 1 FROM "GlobalSetting") OR EXISTS (SELECT 1 FROM "PluginSnippet") OR EXISTS (SELECT 1 FROM "AuditLog") THEN '\''present'\'' ELSE '\''empty'\'' END' 2>/dev/null || printf '%s' 'unknown')
   [ "$business_data" = empty ] || fail '已知迁移失败库中存在业务数据或无法确认空库，拒绝自动恢复。'

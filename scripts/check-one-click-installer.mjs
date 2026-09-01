@@ -25,6 +25,7 @@ required(installer, /api\/v1\/health\/ready[\s\S]*"status": "completed"/, '一�
 required(installer, /后台地址：[\s\S]*管理员账号：[\s\S]*初始密码：/, '一键脚本成功后没有显示后台地址和管理员凭据');
 required(installer, /APPGOG_INSTALL_MANAGED=true[\s\S]*root 拥有且权限为 0600[\s\S]*recover_known_empty_stage3_failure/, '一键脚本不能安全恢复自己创建的未完成安装');
 required(installer, /20260829030000_stage3_data_model[\s\S]*business_data[\s\S]*DROP SCHEMA public CASCADE/, '一键脚本缺少已知空库迁移失败的受限恢复流程');
+required(installer, /resume_install" != true \]; then return 0[\s\S]*migration_state" != recoverable \]; then[\s\S]*return 0/, '一键脚本的无需恢复分支可能在 set -e 下错误退出');
 required(starter, /APPGOG_NODE_BIN:-\/opt\/appgog-runtime\/current\/bin\/node/, '向导启动脚本不能复用一键安装的隔离 Node.js 运行时');
 required(guide + readme, /install-one-click\.sh[\s\S]*Jerry2586\/APPGOG/, '文档缺少 GitHub 一键安装入口');
 forbidden(installer, /curl[^\n]*\|\s*(?:sh|bash)|\beval\b|docker compose down -v/, '一键脚本包含管道执行远程脚本、eval 或删除数据卷');
