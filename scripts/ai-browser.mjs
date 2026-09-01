@@ -1,0 +1,30 @@
+// Opt-in localhost acceptance harness: real AI/CMS HTTP + isolated in-memory DB
+// and deterministic model adapter. NEVER imports AppModule or calls a paid model.
+import {createRequire} from 'node:module';import {fileURLToPath,pathToFileURL} from 'node:url';import {randomUUID} from 'node:crypto';
+const requireApi=createRequire(new URL('../apps/api/package.json',import.meta.url)),requireWeb=createRequire(new URL('../apps/web/package.json',import.meta.url));requireApi('reflect-metadata');
+const load=name=>requireApi(`./dist/src/${name}.js`),{Test}=requireApi('@nestjs/testing'),{ValidationPipe}=requireApi('@nestjs/common'),{JwtModule,JwtService}=requireApi('@nestjs/jwt');
+const {AiController}=load('ai.controller'),{RagAdminController}=load('rag-admin.controller'),{AiService}=load('ai.service'),{AiGatewayService}=load('ai-gateway.service'),{AiPolicyService,AI_DEFAULTS}=load('ai-policy.service'),{KnowledgeService}=load('knowledge.service'),{CmsService}=load('cms.service'),{CmsController,PublicCmsController,CategoryController}=load('cms.controller'),{CmsWriteDto}=load('cms.dto'),{ComponentController}=load('component.controller'),{PrismaService}=load('prisma.service'),{cmsDatabaseFixture}=load('cms-test-fixture'),{JWT_ISSUER,JWT_AUDIENCE}=load('security.config');
+const db=cmsDatabaseFixture();let mode='documents';
+const gateway={status:()=>({configured:mode!=='documents',externalEnabled:mode!=='documents',validEndpoint:true,chatModel:'isolated-fixture',embeddingModel:'isolated-fixture',dimensions:1536}),profile:()=> 'text-only-v1',embed:async()=>{throw new Error('fixture: no external vector calls')},answer:async(question,docs)=>{if(mode==='failure')throw new Error('fixture model failure');if(mode==='slow')await new Promise(resolve=>setTimeout(resolve,3000));return JSON.stringify({answer:'先下载公开客户端，然后按文档完成安装。此回答由隔离测试适配器返回，不代表外部模型验收。',sourceIds:[docs[0].id],unresolved:false})}};
+const module=await Test.createTestingModule({imports:[JwtModule.register({secret:randomUUID(),signOptions:{issuer:JWT_ISSUER,audience:JWT_AUDIENCE,expiresIn:'1h'}})],controllers:[AiController,RagAdminController,CmsController,PublicCmsController,CategoryController,ComponentController],providers:[AiService,AiPolicyService,KnowledgeService,CmsService,{provide:AiGatewayService,useValue:gateway},{provide:PrismaService,useValue:db}]}).compile();
+const app=module.createNestApplication({logger:false});app.setGlobalPrefix('api/v1');app.useBodyParser('json',{limit:'512kb'});app.useGlobalPipes(new ValidationPipe({whitelist:true,forbidNonWhitelisted:true,transform:true}));
+const layout=[{id:'fixture-ai',type:'ai',props:{title:'APPGOG 首页助手',placeholder:'例如：Windows 如何安装？'}}];const page={id:'ai-fixture',name:'AI 组件测试',slug:'home',routeType:'PAGE',status:'DRAFT',draftVersionId:'v1',publishedVersionId:null,draftLayout:layout};
+app.use(async(req,res,next)=>{try{
+  if(req.path==='/api/v1/auth/admin/login'){const requested=req.body.email?.split('@')[0],role=['SUPER_ADMIN','ADMIN','EDITOR','VIEWER'].includes(requested)?requested:'VIEWER';return res.json({accessToken:await module.get(JwtService).signAsync({sub:role,sid:role,role,type:'access'}),expiresIn:3600,user:{id:role,role,name:'第十阶段测试账号',email:`${role}@example.invalid`}})}
+  if(req.path==='/api/v1/admin/pages'&&req.method==='GET')return res.json([page]);
+  if(req.path==='/api/v1/admin/pages/ai-fixture'&&req.method==='GET')return res.json(page);
+  if(req.path==='/api/v1/admin/pages/ai-fixture/versions'&&req.method==='GET')return res.json([]);
+  if(req.path==='/api/v1/__fixture/layout')return res.json(layout);
+  if(req.path==='/api/v1/__fixture/mode'&&req.method==='POST'){if(!['documents','answer','failure','slow'].includes(req.body.mode))return res.sendStatus(400);mode=req.body.mode;return res.json({mode})}
+  if(req.path==='/api/v1/__fixture/process'&&req.method==='POST')return res.json(await module.get(KnowledgeService).processNext());
+  next();
+}catch(error){next(error)}});
+await app.listen(0,'127.0.0.1');const apiOrigin=await app.getUrl();
+const {id,revision,...initial}=AI_DEFAULTS;await db.aiConfiguration.create({data:{id:'main',...initial,globalAssistantEnabled:true,perMinute:60,globalPerMinute:600}});await db.outboundLink.create({data:{kind:'TICKET',enabled:true,destinationUrl:'https://panel.example.invalid/ticket'}});
+const actor={id:'SUPER_ADMIN',sessionId:'SUPER_ADMIN',role:'SUPER_ADMIN',email:'SUPER_ADMIN@example.invalid',displayName:'测试超级管理员'},cms=module.get(CmsService);
+for(const value of [{title:'Windows 安装教程',slug:'help/windows',body:'先下载公开客户端，然后按照步骤安装。Windows 安装和故障排查仅使用公开文档。',ragEnabled:true},{title:'Shadowrocket 苹果配置',slug:'help/ios',body:'苹果 iOS 使用 Shadowrocket 导入配置，然后测试网络连接。',ragEnabled:true},{title:'不投喂的公开文档',slug:'help/disabled',body:'未授权 AI 使用的内容。',ragEnabled:false}]){const row=await cms.save(undefined,Object.assign(new CmsWriteDto(),{type:'ARTICLE',format:'MARKDOWN',...value}),actor);await cms.publish(row.id,row.revision,actor)}
+await cms.save(undefined,Object.assign(new CmsWriteDto(),{type:'ARTICLE',format:'MARKDOWN',title:'秘密草稿不可检索',slug:'secret-draft',body:'秘密草稿凭据不可使用',ragEnabled:true}),actor);
+const {createServer}=await import(pathToFileURL(requireWeb.resolve('vite')).href);
+const server=await createServer({root:fileURLToPath(new URL('../apps/web',import.meta.url)),server:{host:'127.0.0.1',port:5177,strictPort:true,proxy:{'/api':apiOrigin}},plugins:[{name:'stage10-isolated-fixture',configureServer(vite){vite.middlewares.use(async(req,res,next)=>{if(!req.url?.startsWith('/__stage10')&&!req.url?.startsWith('/content/'))return next();res.setHeader('Content-Type','text/html; charset=utf-8');res.end(await vite.transformIndexHtml(req.url,'<!doctype html><html lang="zh-CN"><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>APPGOG 第十阶段隔离验证</title></head><body><div id="app"></div><script type="module" src="/tests/ai-browser.ts"></script></body></html>'))})}}]});
+await server.listen();console.log('Stage 10 isolated fixture: http://127.0.0.1:5177/__stage10-admin');
+for(const signal of ['SIGINT','SIGTERM'])process.on(signal,async()=>{await server.close();await app.close();process.exit(0)});

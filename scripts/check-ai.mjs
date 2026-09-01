@@ -1,0 +1,26 @@
+import {existsSync,readFileSync} from 'node:fs';
+const root=new URL('../',import.meta.url),read=path=>readFileSync(new URL(path,root),'utf8'),failures=[];
+for(const path of ['apps/api/src/ai.controller.ts','apps/api/src/ai.dto.ts','apps/api/src/ai.service.ts','apps/api/src/ai-content.ts','apps/api/src/ai-gateway.service.ts','apps/api/src/ai-provider-http.ts','apps/api/src/ai-policy.service.ts','apps/api/src/knowledge-worker.service.ts','apps/api/src/rag-admin.controller.ts','apps/api/src/ai.http.spec.ts','apps/api/src/ai-content.spec.ts','apps/api/src/ai-gateway.service.spec.ts','apps/api/src/ai-provider-http.spec.ts','apps/api/src/ai-policy.service.spec.ts','apps/api/src/knowledge-worker.service.spec.ts','apps/web/src/components/RagManager.vue','apps/web/src/components/AiPanel.vue','apps/web/src/components/GlobalAiHost.vue','apps/web/src/components/blocks/AiBlock.vue','apps/web/src/ai-client.spec.ts','scripts/ai-browser.mjs','apps/web/tests/ai-browser.ts','docs/10-AI-RAG.md'])if(!existsSync(new URL(path,root)))failures.push('缺少 '+path);
+const check=(file,pattern,message)=>{if(!pattern.test(read(file)))failures.push(message)};
+check('apps/api/src/ai-gateway.service.ts',/max_completion_tokens:1500/,'模型输出未限制');
+check('apps/api/src/ai-gateway.service.ts',/dimensions:1536/,'向量维度未匹配数据库');
+check('apps/api/src/ai-gateway.service.ts',/store:false/,'模型请求未显式关闭存储');
+check('apps/api/src/ai-provider-http.ts',/PROVIDER_REDIRECT_BLOCKED/,'未阻止模型端点重定向');
+check('apps/api/src/ai-policy.service.ts',/aiRateBucket\.upsert/,'AI 限流未持久化');
+check('apps/api/src/ai.service.ts',/parseGroundedAnswer/,'答案缺少引用校验');
+check('apps/api/src/ai.service.spec.ts',/bounds active requests/,'缺少问答并发边界测试');
+check('apps/api/src/knowledge.service.ts',/Reciprocal rank fusion/,'缺少检索融合排序');
+check('apps/api/src/knowledge.service.ts',/lease\.leaseToken!==job\.leaseToken/,'索引缺少租约所有权检查');
+check('apps/api/src/cms.service.ts',/knowledge\.enqueue\(tx/,'发布未在事务中入队');
+check('apps/api/src/app.module.ts',/KnowledgeWorkerService/,'后台任务处理器未注册');
+check('apps/web/src/App.vue',/GlobalAiHost/,'全局客服未覆盖内容详情页');
+check('apps/web/src/components/AiPanel.vue',/\{\{result.answer\}\}/,'AI 答案未使用纯文本展示');
+check('apps/web/src/components/RagManager.vue',/nextCursor/,'批量索引缺少续批入口');
+check('apps/web/src/ai.css',/\.assistant>section\{/,'悬浮面板样式未限制到直接子级');
+if(/\.assistant section\{/.test(read('apps/web/src/effects.css')))failures.push('旧客服样式仍可能覆盖嵌套回答面板');
+check('.env.example',/AI_EXTERNAL_ENABLED=false/,'外部模型必须默认关闭');
+const migration='apps/api/prisma/migrations/20260831100000_stage10_ai_rag/migration.sql';
+for(const marker of ['BEGIN;','COMMIT;','KnowledgeIndexJob_activeKey_key','KnowledgeIndexJob_lease_check','AiConfiguration_bounds_check','AiRateBucket_expiresAt_idx'])if(!read(migration).includes(marker))failures.push('迁移缺少 '+marker);
+for(const model of ['AiConfiguration','AiRateBucket'])check('apps/api/prisma/schema.prisma',new RegExp('model '+model+'\\s*\\{'),'缺少模型 '+model);
+if(failures.length){console.error(failures.join('\n'));process.exit(1)}
+console.log('APPGOG 第十阶段静态守卫通过：专用 AI/RAG 接口、持久队列与限流、公开引用、共享组件及迁移文件完整（不代替真实模型/数据库验收）。');

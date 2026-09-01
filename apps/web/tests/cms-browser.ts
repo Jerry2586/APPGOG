@@ -1,0 +1,13 @@
+import {createApp,defineComponent,h,ref} from 'vue';
+import {createRouter,createWebHistory,RouterView,RouterLink} from 'vue-router';
+import ElementPlus from 'element-plus';
+import 'element-plus/dist/index.css';
+import '../src/style.css';import '../src/media.css';import '../src/cms.css';
+import {loginAdmin} from '../src/api';
+import Admin from '../src/views/Admin.vue';
+import ContentView from '../src/views/ContentView.vue';
+import DataBlock from '../src/components/blocks/DataBlock.vue';
+const library=defineComponent({setup:()=>()=>h('main',[h('h1','测试组件页面'),...['categories','contents','faq'].map(type=>h(DataBlock,{block:{id:type,type,props:{title:type,scope:'CONTENT',limit:2,sort:'newest'}} as any}))])});
+const router=createRouter({history:createWebHistory(),routes:[{path:'/__stage8-cms-test',component:Admin},{path:'/__stage8-library',component:library},{path:'/content/:slug(.*)+',component:ContentView},{path:'/',component:library}]});
+await loginAdmin({email:'ADMIN@example.invalid',password:'isolated-fixture-only'});
+createApp(defineComponent({setup(){const version=ref(0);return()=>h('div',[h('header',{style:'padding:12px;background:#edf0fb;color:#222;color-scheme:light'},[h('strong','第八阶段界面验证：真实 CMS 接口 + 内存数据库'),h('p','不连接真实 PostgreSQL，不代表生产部署验收。'),h(RouterLink,{to:'/__stage8-cms-test'},()=> '后台编辑'),h('span',' · '),h(RouterLink,{to:'/__stage8-library'},()=> '公开组件'),h('label',[' 测试角色 ',h('select',{'aria-label':'测试角色',onChange:async(event:Event)=>{await loginAdmin({email:`${(event.target as HTMLSelectElement).value}@example.invalid`,password:'isolated-fixture-only'});version.value++}},['ADMIN','EDITOR','VIEWER'].map(role=>h('option',{value:role},role)))])]),h(RouterView,{key:version.value})])}})).use(router).use(ElementPlus).mount('#app');

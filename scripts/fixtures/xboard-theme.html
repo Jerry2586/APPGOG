@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN" data-appgog-theme="xboard" data-appgog-accent="blue" data-appgog-density="comfortable">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>APPGOG Xboard 主题隔离验收</title>
+  <link rel="stylesheet" href="/theme/APPGOG/assets/appgog.css" />
+  <style>
+    html,body,#app,.n-config-provider,.n-layout{height:100%}.n-layout{display:flex}.n-layout-sider{width:220px}.fixture-layout{display:flex;flex:1;flex-direction:column;overflow:hidden}.fixture-main{flex:1;overflow:auto}.cus-scroll-y{min-height:100%;padding:24px}.fixture-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}.fixture-split{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}.fixture-menu{padding:24px}.fixture-menu div{padding:8px}.n-card-header{display:flex}.n-card__content{color:#667085}.n-button{display:inline-flex;margin:4px;padding:9px 14px;border:0;background:#2563eb;color:#fff}.n-alert{padding:14px}.n-data-table{width:100%;border-collapse:collapse}.n-data-table-th,.n-data-table-td{padding:12px;text-align:left;border-bottom:1px solid #ddd}@media(max-width:760px){.fixture-grid,.fixture-split{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <a class="appgog-skip-link" href="#appgog-main">跳到主要内容</a>
+  <div id="app">
+    <div class="n-config-provider">
+      <div class="n-layout">
+        <aside class="n-layout-sider"><div class="side-menu fixture-menu"><div class="n-menu-item-content-header">仪表盘</div><div class="n-menu-item-content-header">购买订阅</div><div class="n-menu-item-content-header">节点状态</div></div></aside>
+        <article class="fixture-layout">
+          <header><button type="button" aria-label="切换菜单">☰</button><span style="margin-left:auto">隔离验收账号</span></header>
+          <section class="fixture-main">
+            <div class="cus-scroll-y">
+              <div class="n-alert">本页面只验证主题结构与响应式，不连接账号、数据库或业务 API。</div>
+              <div class="fixture-grid" style="margin-top:16px">
+                <section class="n-card"><h2 class="n-card-header">到期时间</h2><div class="n-card__content">—</div></section>
+                <section class="n-card"><h2 class="n-card-header">账户余额</h2><div class="n-card__content">—</div></section>
+                <section class="n-card"><h2 class="n-card-header">剩余流量</h2><div class="n-card__content">—</div></section>
+                <section class="n-card"><h2 class="n-card-header">待办工单</h2><div class="n-card__content">—</div></section>
+              </div>
+              <div class="fixture-split">
+                <section class="n-card"><h2 class="n-card-header">快速导入</h2><div class="n-card__content"><button class="n-button" type="button">复制</button><button class="n-button" type="button">二维码</button></div></section>
+                <section class="n-card"><h2 class="n-card-header">我的订阅</h2><div class="n-card__content">Xboard 原生订阅数据区域</div></section>
+              </div>
+              <section class="n-card" style="margin-top:16px"><h2 class="n-card-header">流量明细</h2><div class="n-card__content"><table class="n-data-table"><thead><tr><th class="n-data-table-th">时间</th><th class="n-data-table-th">上传</th><th class="n-data-table-th">下载</th></tr></thead><tbody><tr><td class="n-data-table-td">—</td><td class="n-data-table-td">—</td><td class="n-data-table-td">—</td></tr></tbody></table></div></section>
+            </div>
+          </section>
+        </article>
+      </div>
+    </div>
+  </div>
+  <script src="/theme/APPGOG/assets/appgog-shell.js"></script>
+</body>
+</html>

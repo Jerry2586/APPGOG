@@ -1,0 +1,23 @@
+import { readFileSync } from 'node:fs';
+const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+const starter = read('apps/api/src/site-starter.ts'), service = read('apps/api/src/page.service.ts'), controller = read('apps/api/src/page.controller.ts');
+const publicController = read('apps/api/src/public.controller.ts'), page = read('apps/web/src/views/SitePage.vue'), css = read('apps/web/src/site.css');
+const editor = read('apps/web/src/components/PageEditor.vue'), tests = read('apps/api/src/site.http.spec.ts');
+const failures = [], required = (text, pattern, message) => { if (!pattern.test(text)) failures.push(message); };
+for (let id = 1; id <= 16; id++) required(starter, new RegExp(`SITE-${String(id).padStart(3, '0')}`), `官网方案缺少 SITE-${String(id).padStart(3, '0')}`);
+for (const slug of ['home','nodes','nodes/detail','downloads','help','about','login','register','company','careers','press','partners','affiliate','enterprise','privacy','no-logs','support','shop','purchase','dashboard','ticket']) required(starter, new RegExp(`['"]${slug.replace('/', '\\/')}['"]`), `官网方案缺少 /${slug}`);
+required(starter, /publicationRequirement/, '缺少真实资料发布门禁');
+required(service, /publicationRequirements[\s\S]*?BadRequestException/, '服务端未阻止待核实页面发布');
+required(service, /SITE_DRAFT_CREATED[\s\S]*?Serializable/, '官网初始化缺少逐页审计或串行化事务');
+required(service, /occupied\.has[\s\S]*?skipped\.push/, '官网初始化会覆盖已有路由');
+required(controller, /@Roles\('ADMIN', 'SUPER_ADMIN'\)[\s\S]*?installSiteStarter/, '官网批量初始化权限过宽');
+required(publicController, /pages\/\*slug/, '节点详情等嵌套路由不受支持');
+required(page, /siteSlug\(route\.params\.slug\)/, '公开页错误处理嵌套路由参数');
+required(page, /loadError[\s\S]*?重试加载/, '公开页服务故障缺少重试能力');
+required(css, /@media\(max-width:600px\)[\s\S]*?@media\(prefers-reduced-motion:reduce\)/, '官网缺少手机或减少动画样式');
+required(editor, /\/admin\/pages\/site-starter[\s\S]*?pendingChecks/, '页面编辑器缺少官网清单或发布前核实清单');
+required(tests, /never falls back to built-in recipes[\s\S]*?rolls back the full batch[\s\S]*?rejects publication with nested pending checks/, '官网 HTTP 验收未覆盖草稿隔离、回滚和发布门禁');
+if (/vip@appgog|appgog_vip_bot|5000\+|60\+|10Gbps|99\.99/.test(starter)) failures.push('官网方案包含未确认的业务事实');
+if (/https?:\/\//.test(starter)) failures.push('官网方案写死了外部地址');
+if (failures.length) { console.error('APPGOG 官网检查失败：\n' + failures.map(x => `- ${x}`).join('\n')); process.exit(1); }
+console.log('APPGOG 官网检查通过：21 个草稿页面/入口、发布门禁、权限、嵌套路由及响应式边界完整。');

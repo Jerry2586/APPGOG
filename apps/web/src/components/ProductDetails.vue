@@ -1,0 +1,14 @@
+<script setup lang="ts">
+import {computed,onUnmounted,ref,watch} from 'vue';
+import {api} from '../api';import {safeCmsHtml} from '../cms-client';
+import {canPurchase,externalPurchaseUrl,moneyLabel,type PublicProduct} from '../catalog-client';
+const props=defineProps<{id:string|null}>(),emit=defineEmits<{close:[];add:[item:PublicProduct]}>();
+const item=ref<PublicProduct|null>(null),error=ref(''),loading=ref(false),selectedImage=ref(''),dialog=ref<HTMLDialogElement>();let generation=0;
+const images=computed(()=>item.value?[...new Set([item.value.coverUrl,...item.value.gallery].filter(Boolean))] as string[]:[]);
+async function load(){const request=++generation;item.value=null;error.value='';if(!props.id)return;loading.value=true;try{const {data}=await api.get(`/public/products/${encodeURIComponent(props.id)}`);if(request!==generation)return;item.value=data;selectedImage.value=data.coverUrl||data.gallery?.[0]||''}catch(e:any){if(request===generation)error.value=e.response?.status===404?'商品不存在或已下架':'商品详情加载失败'}finally{if(request===generation)loading.value=false}}
+watch(()=>props.id,load,{immediate:true});
+watch([()=>props.id,dialog],([id,element])=>{if(!element)return;if(id&&!element.open)element.showModal();if(!id&&element.open)element.close()},{immediate:true,flush:'post'});
+function close(){emit('close')}
+onUnmounted(()=>{generation++;if(dialog.value?.open)dialog.value.close()});
+</script>
+<template><dialog ref="dialog" class="product-detail-dialog" aria-labelledby="product-detail-title" @cancel.prevent="close" @close="id&&close()"><header class="product-dialog-heading"><h2 id="product-detail-title">{{item?.name||'商品详情'}}</h2><button type="button" aria-label="关闭商品详情" @click="close">×</button></header><p v-if="loading" role="status">正在读取商品…</p><p v-else-if="error" role="alert">{{error}} <button @click="load">重试详情</button></p><article v-else-if="item" class="product-detail"><p>{{item.summary}}</p><img v-if="selectedImage" class="product-main-image" :src="selectedImage" :alt="item.name"><div class="product-thumbnails" aria-label="商品相册"><button v-for="(url,index) in images" :key="url" :aria-label="`查看商品图片 ${index+1}`" :aria-pressed="selectedImage===url" @click="selectedImage=url"><img :src="url" alt=""></button></div><p><strong>{{moneyLabel(item.price,item.currency)}}</strong> <del v-if="item.compareAtPrice">{{moneyLabel(item.compareAtPrice,item.currency)}}</del></p><p>{{item.stock>0?`库存 ${item.stock}`:'已售罄'}} · 销量 {{item.sales}}</p><div class="product-body" v-html="safeCmsHtml(item.descriptionHtml,'RICH_TEXT')"></div><div class="catalog-actions"><button :disabled="!canPurchase(item)" @click="emit('add',item)">加入购物车</button><a v-if="canPurchase(item)" :href="externalPurchaseUrl(item.externalUrl)" target="_blank" rel="noopener noreferrer">前往外部购买 ↗</a></div><p class="catalog-note">库存与销量由运营维护；最终价格、数量和交付由外部站点确认，APPGOG 不处理订单与支付。</p></article></dialog></template>

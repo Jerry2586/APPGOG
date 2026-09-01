@@ -1,0 +1,25 @@
+import {readFileSync} from 'node:fs';
+const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
+const failures=[],check=(source,pattern,message)=>{if(!pattern.test(source))failures.push(message)};
+const service=read('apps/api/src/operations.service.ts'),controller=read('apps/api/src/operations.controller.ts'),validation=read('apps/api/src/operations-validation.ts'),schema=read('apps/api/prisma/schema.prisma'),migration=read('apps/api/prisma/migrations/20260831110000_stage11_operations/migration.sql');
+check(schema,/model ThemeState[\s\S]*?defaultThemeId/,'缺少持久默认主题');
+check(service,/TransactionIsolationLevel.Serializable/,'运营写入未使用串行化事务');
+check(service,/startAt: \{ lt: parsed.endAt \}.*endAt: \{ gt: parsed.startAt \}/,'调度缺少时间窗冲突检查');
+check(service,/schedule\?\.themeId \?\? state.defaultThemeId/,'调度结束未恢复默认');
+check(service,/pluginSnippetVersion.create/,'缺少不可变插件版本');
+check(service,/PLUGIN_RESTORED_DISABLED/,'插件回退未保持停用');
+check(controller,/@UseGuards\(AdminGuard, RolesGuard\)/,'运营接口未认证');
+check(controller,/@Post\('pluginSnippet'\) @Roles\('SUPER_ADMIN'\)/,'可执行代码未限制超级管理员');
+check(validation,/integer\(data.delayMs, '延迟毫秒', 3000, 60000\)/,'后端插件延迟可绕过');
+check(migration,/PLUGIN_MIGRATION_DISABLED/,'旧插件未经复核即执行');
+check(read('apps/web/src/plugin-runtime.ts'),/Math.max\(3000/,'前端最短延迟缺失');
+check(read('apps/web/src/plugin-runtime.ts'),/options.reload\(\)/,'已执行插件停用缺少文档清理');
+check(read('apps/web/src/router.ts'),/to.path.startsWith\('\/admin'\) !== from.path.startsWith\('\/admin'\)/,'公开脚本可能跨入管理文档');
+check(read('apps/web/src/App.vue'),/GlobalOperationsHost/,'公开主题及插件未全局接入');
+check(read('apps/web/src/components/blocks/MarketingBlock.vue'),/operatingCampaigns/,'营销组件未绑定后台数据源');
+check(read('apps/web/src/components/OperationsManager.vue'),/ops-preview/,'缺少主题实时预览');
+const generic=read('apps/api/src/admin.controller.ts').match(/const models = \[([\s\S]*?)\]/)?.[1]||'';
+if(/theme|marketingCampaign|pluginSnippet/.test(generic))failures.push('通用接口仍可绕过运营校验');
+if(/function inject|boot.snippets/.test(read('apps/web/src/views/SitePage.vue')))failures.push('旧页面重复注入入口未清理');
+if(failures.length){console.error(failures.join('\n'));process.exit(1)}
+console.log('APPGOG 第十一阶段静态守卫通过：版本化运营接口、调度恢复、营销绑定、插件延迟/审计/隔离（不替代真实环境验收）。');

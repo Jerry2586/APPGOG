@@ -1,0 +1,315 @@
+:root {
+  --appgog-accent: #2563eb;
+  --appgog-accent-rgb: 37, 99, 235;
+  --appgog-ink: #111827;
+  --appgog-muted: #667085;
+  --appgog-line: rgba(15, 23, 42, .1);
+  --appgog-surface: rgba(255, 255, 255, .94);
+  --appgog-canvas: #f4f6fa;
+  --appgog-radius: 18px;
+  --appgog-shadow: 0 18px 45px rgba(15, 23, 42, .08);
+  color-scheme: light;
+}
+
+:root[data-appgog-accent="default"] { --appgog-accent: #059669; --appgog-accent-rgb: 5, 150, 105; }
+:root[data-appgog-accent="darkblue"] { --appgog-accent: #4f46e5; --appgog-accent-rgb: 79, 70, 229; }
+:root[data-appgog-accent="black"] { --appgog-accent: #111827; --appgog-accent-rgb: 17, 24, 39; }
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; min-width: 320px; min-height: 100%; }
+
+body {
+  background: var(--appgog-canvas);
+  color: var(--appgog-ink);
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.appgog-skip-link {
+  position: fixed;
+  z-index: 100000;
+  top: 8px;
+  left: 12px;
+  padding: 10px 14px;
+  color: #fff;
+  background: #111827;
+  border-radius: 10px;
+  transform: translateY(-150%);
+  transition: transform .15s ease;
+}
+
+.appgog-skip-link:focus { transform: translateY(0); }
+
+.appgog-ready #app > .n-config-provider > .n-layout > .n-layout-sider { display: none !important; }
+.appgog-ready #app article { min-width: 0; width: 100%; }
+
+#app article > header {
+  min-height: 62px;
+  padding-inline: clamp(16px, 3vw, 40px) !important;
+  border-bottom: 1px solid var(--appgog-line);
+  background: rgba(255, 255, 255, .88) !important;
+  backdrop-filter: blur(20px);
+}
+
+#app article > header::before {
+  content: "CONTROL / XBOARD";
+  margin-right: auto;
+  color: var(--appgog-muted);
+  font: 600 10px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
+  letter-spacing: .14em;
+}
+
+.appgog-console-nav {
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 62px;
+  padding: 8px clamp(16px, 3vw, 40px);
+  border-bottom: 1px solid var(--appgog-line);
+  background: var(--appgog-surface);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, .035);
+}
+
+.appgog-console-nav__brand {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  color: var(--appgog-ink);
+  font-weight: 780;
+  letter-spacing: -.02em;
+  text-decoration: none;
+}
+
+.appgog-console-nav__brand small {
+  display: block;
+  margin-top: 1px;
+  color: var(--appgog-muted);
+  font: 600 8px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+  letter-spacing: .18em;
+}
+
+.appgog-console-nav__brand-mark {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(145deg, var(--appgog-accent), #111827);
+  border-radius: 11px;
+  box-shadow: 0 8px 20px rgba(var(--appgog-accent-rgb), .25);
+}
+
+.appgog-console-nav__scroller {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.appgog-console-nav__scroller::-webkit-scrollbar { display: none; }
+
+.appgog-console-nav__link,
+.appgog-console-nav__auxiliary {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: #475467;
+  font-size: 13px;
+  font-weight: 650;
+  text-decoration: none;
+  transition: color .16s ease, background .16s ease, border-color .16s ease;
+}
+
+.appgog-console-nav__index {
+  color: #98a2b3;
+  font: 600 9px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.appgog-console-nav__link:hover,
+.appgog-console-nav__link.is-active,
+.appgog-console-nav__auxiliary:hover,
+.appgog-console-nav__auxiliary.is-active {
+  color: var(--appgog-accent);
+  background: rgba(var(--appgog-accent-rgb), .075);
+  border-color: rgba(var(--appgog-accent-rgb), .12);
+}
+
+.appgog-console-nav__link.is-active::after {
+  content: "";
+  position: absolute;
+  right: 12px;
+  bottom: -9px;
+  left: 12px;
+  height: 2px;
+  background: var(--appgog-accent);
+  border-radius: 999px;
+}
+
+.appgog-console-nav__auxiliary {
+  color: var(--appgog-muted);
+  border-color: var(--appgog-line);
+  font-size: 12px;
+}
+
+#appgog-main {
+  background:
+    radial-gradient(circle at 92% 0, rgba(var(--appgog-accent-rgb), .07), transparent 30%),
+    var(--appgog-canvas) !important;
+}
+
+#appgog-main > .cus-scroll-y { padding: clamp(14px, 2.2vw, 30px) !important; }
+
+#app .n-card {
+  border: 1px solid var(--appgog-line) !important;
+  border-radius: var(--appgog-radius) !important;
+  background: var(--appgog-surface) !important;
+  box-shadow: var(--appgog-shadow);
+  overflow: hidden;
+}
+
+#app .n-card-header {
+  padding: 20px 22px 14px;
+  color: var(--appgog-ink);
+  font-size: 15px;
+  font-weight: 720;
+  letter-spacing: -.01em;
+}
+
+#app .n-card__content { padding: 18px 22px 22px; }
+
+:root[data-appgog-density="compact"] #app .n-card-header { padding: 16px 18px 10px; }
+:root[data-appgog-density="compact"] #app .n-card__content { padding: 14px 18px 18px; }
+
+#app .n-alert {
+  border: 1px solid rgba(var(--appgog-accent-rgb), .16) !important;
+  border-radius: 14px !important;
+  background: rgba(var(--appgog-accent-rgb), .055) !important;
+}
+
+#app .n-button { border-radius: 10px; font-weight: 650; }
+#app .n-button--primary-type { box-shadow: 0 7px 18px rgba(var(--appgog-accent-rgb), .2); }
+
+#app .n-input,
+#app .n-base-selection { border-radius: 11px; }
+
+#app .n-data-table,
+#app .n-data-table-wrapper { border-radius: 14px; overflow: hidden; }
+
+#app .n-data-table-th {
+  color: var(--appgog-muted);
+  background: rgba(15, 23, 42, .035) !important;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+#app .n-data-table-td { border-color: var(--appgog-line) !important; }
+
+#app .n-progress .n-progress-graph-line-fill { box-shadow: 0 0 18px rgba(var(--appgog-accent-rgb), .25); }
+
+:root[data-appgog-page="dashboard"] #app .n-card:first-of-type {
+  border-color: rgba(var(--appgog-accent-rgb), .22) !important;
+  box-shadow: 0 22px 55px rgba(var(--appgog-accent-rgb), .1);
+}
+
+:root[data-appgog-page="plan"] #app .card-container {
+  gap: 18px;
+  padding: 0 !important;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+}
+
+:root[data-appgog-page="plan"] #app .card-item { max-width: none; }
+
+:root[data-appgog-page="knowledge"] #app .n-card,
+:root[data-appgog-page="order"] #app .n-card,
+:root[data-appgog-page="ticket"] #app .n-card { box-shadow: 0 12px 34px rgba(15, 23, 42, .06); }
+
+.appgog-console-footer {
+  display: flex;
+  flex: 0 0 30px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 30px;
+  padding: 0 clamp(16px, 3vw, 40px);
+  color: var(--appgog-muted);
+  background: var(--appgog-surface);
+  border-top: 1px solid var(--appgog-line);
+  font-size: 10px;
+  letter-spacing: .025em;
+}
+
+.appgog-console-footer__status { display: inline-flex; align-items: center; gap: 7px; }
+.appgog-console-footer__status i {
+  width: 6px;
+  height: 6px;
+  background: var(--appgog-accent);
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px rgba(var(--appgog-accent-rgb), .1);
+}
+
+a:focus-visible,
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid rgba(var(--appgog-accent-rgb), .35) !important;
+  outline-offset: 3px;
+}
+
+.dark,
+html.dark {
+  --appgog-ink: #f4f7fb;
+  --appgog-muted: #9aa4b2;
+  --appgog-line: rgba(255, 255, 255, .09);
+  --appgog-surface: rgba(15, 20, 30, .94);
+  --appgog-canvas: #090d14;
+  --appgog-shadow: 0 18px 45px rgba(0, 0, 0, .28);
+  color-scheme: dark;
+}
+
+.dark #app article > header { background: rgba(12, 17, 26, .88) !important; }
+.dark .appgog-console-nav__link { color: #c3cad5; }
+.dark #app .n-data-table-th { background: rgba(255, 255, 255, .035) !important; }
+
+@media (max-width: 1180px) {
+  .appgog-console-nav { gap: 10px; }
+  .appgog-console-nav__brand { font-size: 12px; }
+  .appgog-console-nav__brand-mark { width: 30px; height: 30px; border-radius: 9px; }
+  .appgog-console-nav__link { padding-inline: 8px; }
+  .appgog-console-nav__index { display: none; }
+}
+
+@media (max-width: 760px) {
+  #app article > header { min-height: 54px; }
+  #app article > header::before { display: none; }
+  .appgog-console-nav {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    min-height: 104px;
+    padding-block: 8px 6px;
+  }
+  .appgog-console-nav__brand { grid-column: 1; }
+  .appgog-console-nav__auxiliary { grid-column: 2; justify-self: end; min-height: 32px; }
+  .appgog-console-nav__scroller { grid-column: 1 / -1; width: 100%; }
+  .appgog-console-nav__link { min-height: 36px; }
+  .appgog-console-nav__link.is-active::after { bottom: -7px; }
+  #appgog-main > .cus-scroll-y { padding: 12px !important; }
+  #app .n-card-header { padding: 16px 16px 10px; }
+  #app .n-card__content { padding: 14px 16px 17px; }
+  .appgog-console-footer { justify-content: center; }
+  .appgog-console-footer__status { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+}

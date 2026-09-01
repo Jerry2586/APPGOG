@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <title>安装 APPGOG</title>
+  <link rel="stylesheet" href="/install/style.css">
+</head>
+<body>
+  <div class="ambient ambient-a"></div><div class="ambient ambient-b"></div>
+  <main class="installer-shell">
+    <aside class="rail" aria-label="安装进度">
+      <a class="brand" href="/install/" aria-label="APPGOG 安装向导"><span class="brand-mark">A</span><span>APPGOG</span></a>
+      <ol id="steps">
+        <li class="active" data-step="auth"><span>1</span><div><strong>安全连接</strong><small>安装 Token</small></div></li>
+        <li data-step="check"><span>2</span><div><strong>环境检查</strong><small>面板与 Docker</small></div></li>
+        <li data-step="config"><span>3</span><div><strong>站点配置</strong><small>域名与管理员</small></div></li>
+        <li data-step="review"><span>4</span><div><strong>确认安装</strong><small>隔离边界复核</small></div></li>
+        <li data-step="deploy"><span>5</span><div><strong>完成部署</strong><small>启动与健康检查</small></div></li>
+      </ol>
+      <div class="rail-safe"><span></span><p><strong>完全隔离</strong><br>不读取 Xboard API、数据库、Cookie 或 Token。</p></div>
+    </aside>
+
+    <section class="stage">
+      <header class="stage-top"><span id="connectionBadge" class="status neutral">尚未连接</span><button id="forgetToken" class="text-button" hidden>清除 Token</button></header>
+      <div id="notice" class="notice" role="alert" hidden></div>
+
+      <section class="screen active" data-screen="auth">
+        <p class="eyebrow">APPGOG SETUP</p>
+        <h1>几分钟，完成一套<br>干净的独立部署。</h1>
+        <p class="lead">为宝塔、1Panel、aaPanel 和标准 Docker 服务器设计。安装 Token 只保护本次向导，不参与任何业务登录。</p>
+        <form id="tokenForm" class="glass compact">
+          <label for="installToken">一次性安装 Token</label>
+          <div class="input-action"><input id="installToken" name="token" type="password" minlength="20" autocomplete="one-time-code" placeholder="粘贴终端中显示的 Token" required><button type="button" id="toggleToken" aria-label="显示或隐藏 Token">显示</button></div>
+          <p class="hint">Token 不写入 URL，仅保存在当前标签页的 Session Storage；关闭浏览器后自动清除。</p>
+          <button class="primary wide" type="submit">安全连接</button>
+        </form>
+      </section>
+
+      <section class="screen" data-screen="check">
+        <p class="eyebrow">STEP 2 · PREFLIGHT</p><h1>选择你的服务器面板。</h1>
+        <p class="lead">不同面板使用同一套经过验收的 Docker Compose，区别只在站点反向代理和操作入口。</p>
+        <div id="panelGrid" class="panel-grid" role="radiogroup" aria-label="服务器面板">
+          <button class="panel-card selected" data-panel="bt" role="radio" aria-checked="true"><span>BT</span><strong>宝塔面板</strong><small>Linux 面板终端 + Docker</small></button>
+          <button class="panel-card" data-panel="1panel" role="radio" aria-checked="false"><span>1P</span><strong>1Panel</strong><small>容器 / 网站反向代理</small></button>
+          <button class="panel-card" data-panel="aapanel" role="radio" aria-checked="false"><span>aa</span><strong>aaPanel</strong><small>国际版宝塔工作流</small></button>
+          <button class="panel-card" data-panel="docker" role="radio" aria-checked="false"><span>◫</span><strong>Docker</strong><small>标准 Compose 主机</small></button>
+          <button class="panel-card" data-panel="ssh" role="radio" aria-checked="false"><span>&gt;_</span><strong>SSH</strong><small>纯终端 Linux 服务器</small></button>
+        </div>
+        <div class="glass"><div class="section-heading"><div><h2>服务器检查</h2><p id="checkSummary">正在读取环境…</p></div><button id="refreshChecks" class="secondary" type="button">重新检查</button></div><ul id="checkList" class="check-list" aria-live="polite"></ul></div>
+        <div class="actions"><button class="secondary" data-back="auth">返回</button><button id="checkNext" class="primary" disabled>继续配置</button></div>
+      </section>
+
+      <section class="screen" data-screen="config">
+        <p class="eyebrow">STEP 3 · CONFIGURE</p><h1>只填写真正需要的内容。</h1>
+        <p class="lead">数据库密码和 JWT 密钥由服务器自动生成。不会要求 Xboard Token，也不会连接 Xboard 数据库。</p>
+        <form id="configForm">
+          <div class="glass form-section"><div class="section-heading"><div><h2>站点</h2><p>面板反向代理的正式 HTTPS 地址</p></div></div><div class="form-grid"><label>站点 Origin<input name="origin" type="url" placeholder="https://www.example.com" required></label><label>Web 内部端口<input name="webPort" type="number" min="1024" max="65535" value="8080" required></label></div></div>
+          <div class="glass form-section"><div class="section-heading"><div><h2>独立管理员</h2><p>只用于 APPGOG 后台，不映射 Xboard 用户</p></div></div><div class="form-grid"><label>管理员邮箱<input name="adminEmail" type="email" autocomplete="username" placeholder="admin@example.com" required></label><label>显示名称<input name="adminDisplayName" maxlength="100" value="APPGOG 管理员" required></label><label class="full">初始强密码<input name="adminPassword" type="password" autocomplete="new-password" minlength="16" placeholder="至少 16 位，包含三类字符" required><small>首次登录后必须立即修改，旧会话会被撤销。</small></label></div></div>
+          <details class="glass form-section"><summary><span><strong>Xboard 普通跳转</strong><small>可选；仅页面 URL，无 Token、API、SSO 或查询参数</small></span><span>展开</span></summary><div class="form-grid detail-body"><label>登录页<input name="xLogin" type="url" placeholder="https://panel.example.com/login"></label><label>注册页<input name="xRegister" type="url" placeholder="https://panel.example.com/register"></label><label>购买页<input name="xPurchase" type="url" placeholder="https://panel.example.com/buy"></label><label>用户面板<input name="xDashboard" type="url" placeholder="https://panel.example.com/dashboard"></label><label>工单页<input name="xTicket" type="url" placeholder="https://panel.example.com/ticket"></label><label>联盟页<input name="xAffiliate" type="url" placeholder="https://panel.example.com/affiliate"></label></div></details>
+          <details class="glass form-section"><summary><span><strong>AI 服务</strong><small>默认关闭；密钥只写入服务器 .env</small></span><span>展开</span></summary><div class="detail-body"><label class="switch-row"><span><strong>启用外部模型</strong><small>确认后才会产生外部模型请求和费用</small></span><input id="externalAi" name="externalAi" type="checkbox" role="switch"></label><div id="aiFields" class="form-grid" hidden><label>HTTPS API 地址<input name="aiBaseUrl" type="url" value="https://api.openai.com/v1"></label><label>服务端 API Key<input name="aiKey" type="password" autocomplete="off"></label></div></div></details>
+          <div class="actions"><button class="secondary" type="button" data-back="check">返回</button><button class="primary" type="submit">检查配置</button></div>
+        </form>
+      </section>
+
+      <section class="screen" data-screen="review">
+        <p class="eyebrow">STEP 4 · REVIEW</p><h1>最后确认一次。</h1><p class="lead">保存后会创建权限受限的 `.env`，不会覆盖已有配置。下一步才会构建和启动容器。</p>
+        <div id="reviewCard" class="glass review-grid"></div>
+        <div class="isolation"><span>✓</span><div><strong>隔离边界已锁定</strong><p>APPGOG 只保存普通页面跳转；无 Xboard Token、API、数据库连接、共享账号或 Cookie。</p></div></div>
+        <label class="confirm"><input id="confirmIsolation" type="checkbox">我确认部署的是独立 APPGOG 系统，并已备份服务器现有数据。</label>
+        <div class="actions"><button class="secondary" data-back="config">返回修改</button><button id="saveConfig" class="primary" disabled>保存安全配置</button></div>
+      </section>
+
+      <section class="screen" data-screen="deploy">
+        <p class="eyebrow">STEP 5 · DEPLOY</p><h1 id="deployTitle">准备启动 APPGOG。</h1><p id="deployLead" class="lead">向导只执行固定的 Compose 验证、构建、启动和健康检查，不接受自定义 Shell 命令。</p>
+        <div class="glass deploy-card"><div class="orb" id="deployOrb"><span></span></div><ol id="deployLog" class="deploy-log"><li class="waiting">等待开始</li></ol><button id="deployButton" class="primary wide">开始安装</button></div>
+        <div id="completeCard" class="complete" hidden><span class="complete-icon">✓</span><h2>APPGOG 已准备就绪</h2><p>安装向导已经锁定。请关闭此服务，并在面板中把正式域名反向代理到 Web 端口。</p><div id="completeLinks"></div></div>
+      </section>
+    </section>
+  </main>
+  <script type="module" src="/install/app.js"></script>
+</body>
+</html>

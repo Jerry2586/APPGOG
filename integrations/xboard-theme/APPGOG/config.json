@@ -1,0 +1,32 @@
+{
+  "name": "APPGOG",
+  "description": "APPGOG 独立 Xboard 用户控制台主题",
+  "version": "1.0.0",
+  "images": "",
+  "configs": [
+    {
+      "label": "强调色",
+      "placeholder": "请选择控制台强调色",
+      "field_name": "theme_color",
+      "field_type": "select",
+      "select_options": {
+        "blue": "深海蓝",
+        "default": "翡翠绿",
+        "darkblue": "靛青蓝",
+        "black": "石墨黑"
+      },
+      "default_value": "blue"
+    },
+    {
+      "label": "内容密度",
+      "placeholder": "请选择内容密度",
+      "field_name": "content_density",
+      "field_type": "select",
+      "select_options": {
+        "comfortable": "舒适",
+        "compact": "紧凑"
+      },
+      "default_value": "comfortable"
+    }
+  ]
+}

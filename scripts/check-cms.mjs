@@ -1,0 +1,25 @@
+import {readFileSync,existsSync} from 'node:fs';
+const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
+const failures=[];
+for(const path of ['apps/api/src/cms.controller.ts','apps/api/src/cms.service.ts','apps/api/src/cms.dto.ts','apps/api/src/cms-content.ts','apps/api/src/cms.http.spec.ts','apps/api/src/cms-content.spec.ts','apps/api/src/knowledge.service.spec.ts','apps/web/src/components/CmsManager.vue','apps/web/src/components/CategoryManager.vue','apps/web/src/components/RichTextEditor.vue','apps/web/src/components/VideoPlayer.vue','apps/web/src/views/ContentView.vue','apps/web/src/cms-client.spec.ts','docs/08-CMS.md'])if(!existsSync(new URL('../'+path,import.meta.url)))failures.push('缺少 '+path);
+const check=(file,pattern,message)=>{if(!pattern.test(read(file)))failures.push(message)};
+check('apps/api/src/cms.service.ts',/publishedSnapshot: snapshot/,'CMS 发布未生成独立快照');
+check('apps/api/src/cms.service.ts',/PrismaTransaction|Prisma\.TransactionIsolationLevel\.Serializable/,'CMS 事务未串行化');
+check('apps/api/src/cms.service.ts',/this\.revision\(/,'CMS 缺少乐观版本检查');
+check('apps/api/src/cms.service.ts',/CMS_STATUS_CHANGED/,'CMS 缺少状态审计');
+check('apps/api/src/cms-content.ts',/html: false/,'Markdown 原始 HTML 未禁用');
+check('apps/api/src/cms-content.ts',/sanitizeHtml/,'正文缺少服务端清理');
+check('apps/api/src/cms-content.ts',/validateCategoryParent/,'分类缺少防循环');
+check('apps/web/src/components/RichTextEditor.vue',/new Quill/,'缺少真实富文本编辑器');
+check('apps/web/src/components/RichTextEditor.vue',/MediaPicker/,'富文本未接入媒体选择');
+check('apps/web/src/components/VideoPlayer.vue',/canPlayType\('application\/vnd\.apple\.mpegurl'\)/,'缺少原生 HLS 分支');
+check('apps/web/src/components/VideoPlayer.vue',/import\('hls\.js'\)/,'缺少按需 Hls.js 播放');
+check('apps/web/src/components/blocks/DataBlock.vue',/item\.faqQuestion/,'FAQ 组件未绑定结构化问题');
+check('apps/web/src/components/blocks/DataBlock.vue',/public\/content-search/,'列表未接入专用分页搜索');
+check('apps/api/src/knowledge.service.ts',/cmsSnapshot\(doc\.publishedSnapshot\)/,'索引未使用公开快照');
+const models=read('apps/api/src/admin.controller.ts').match(/const models = \[([\s\S]*?)\] as const/)?.[1]||'';
+if(/'content'|'category'/.test(models))failures.push('CMS/分类仍可绕过专用接口');
+const migration='apps/api/prisma/migrations/20260831080000_stage8_cms/migration.sql';
+for(const marker of ['Content_public_snapshot_check','Content_public_faq_check','Content_public_video_check','Content_publishedSlug_key','BEGIN;','COMMIT;'])check(migration,new RegExp(marker),'CMS 迁移缺少 '+marker);
+if(failures.length){console.error(failures.join('\n'));process.exit(1)}
+console.log('APPGOG CMS 静态守卫通过：专用接口、发布隔离、分类、编辑器、HLS、FAQ、索引边界和迁移文件完整（不替代真实数据库/浏览器验收）。');

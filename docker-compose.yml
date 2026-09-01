@@ -1,0 +1,103 @@
+name: appgog
+
+x-api-environment: &api-environment
+  NODE_ENV: production
+  PORT: 3000
+  DATABASE_URL: "postgresql://appgog:${APPGOG_DB_PASSWORD:?请在 .env 设置 APPGOG_DB_PASSWORD}@postgres:5432/appgog"
+  REDIS_URL: redis://redis:6379
+  JWT_SECRET: "${JWT_SECRET:?请在 .env 设置至少 32 位 JWT_SECRET}"
+  ADMIN_REFRESH_TTL_DAYS: "${ADMIN_REFRESH_TTL_DAYS:-7}"
+  APP_ORIGIN: "${APP_ORIGIN:?请在 .env 设置 APP_ORIGIN}"
+  ADMIN_ORIGIN: "${ADMIN_ORIGIN:?请在 .env 设置 ADMIN_ORIGIN}"
+  ADMIN_EMAIL: "${ADMIN_EMAIL:-admin@appgog.local}"
+  ADMIN_DISPLAY_NAME: "${ADMIN_DISPLAY_NAME:-APPGOG 管理员}"
+  ADMIN_INITIAL_PASSWORD: "${ADMIN_INITIAL_PASSWORD:?请在 .env 设置初始管理员强密码}"
+  XBOARD_LOGIN_URL: "${XBOARD_LOGIN_URL:-}"
+  XBOARD_REGISTER_URL: "${XBOARD_REGISTER_URL:-}"
+  XBOARD_PURCHASE_URL: "${XBOARD_PURCHASE_URL:-}"
+  XBOARD_DASHBOARD_URL: "${XBOARD_DASHBOARD_URL:-}"
+  XBOARD_TICKET_URL: "${XBOARD_TICKET_URL:-}"
+  XBOARD_AFFILIATE_URL: "${XBOARD_AFFILIATE_URL:-}"
+  OPENAI_BASE_URL: "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
+  OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+  OPENAI_CHAT_MODEL: "${OPENAI_CHAT_MODEL:-gpt-4.1-mini}"
+  OPENAI_EMBEDDING_MODEL: "${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}"
+  AI_EXTERNAL_ENABLED: "${AI_EXTERNAL_ENABLED:-false}"
+  AI_DAILY_MODEL_CALL_LIMIT: "${AI_DAILY_MODEL_CALL_LIMIT:-200}"
+  AI_WORKER_ENABLED: "${AI_WORKER_ENABLED:-true}"
+  AI_TRUSTED_PROXY_IPS: "${AI_TRUSTED_PROXY_IPS:-}"
+  MEDIA_STORAGE_DIR: /app/data/media
+
+services:
+  init:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment: *api-environment
+    command: ["sh", "-c", "./apps/api/node_modules/.bin/prisma migrate deploy --schema apps/api/prisma/schema.prisma && node apps/api/dist/prisma/seed.js"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+    networks: [appgog_private]
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment: *api-environment
+    ports: ["3000:3000"]
+    depends_on:
+      init: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    volumes: ["appgog_media:/app/data/media"]
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/v1/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks: [appgog_edge, appgog_private]
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    ports: ["${APPGOG_WEB_PORT:-8080}:80"]
+    depends_on:
+      api: { condition: service_healthy }
+    restart: unless-stopped
+    networks: [appgog_edge]
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: appgog
+      POSTGRES_PASSWORD: "${APPGOG_DB_PASSWORD:?请在 .env 设置 APPGOG_DB_PASSWORD}"
+      POSTGRES_DB: appgog
+    volumes: ["appgog_pg:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U appgog"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks: [appgog_private]
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: ["appgog_redis:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    networks: [appgog_private]
+volumes:
+  appgog_pg:
+  appgog_redis:
+  appgog_media:
+networks:
+  appgog_edge:
+    name: appgog_edge
+  appgog_private:
+    name: appgog_private
+    internal: true

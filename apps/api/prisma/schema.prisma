@@ -1,0 +1,523 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PublishStatus {
+  DRAFT
+  PUBLISHED
+  OFFLINE
+  ARCHIVED
+}
+
+enum RouteType {
+  PAGE
+  REDIRECT
+}
+
+enum ContentType {
+  ARTICLE
+  VIDEO
+  FAQ
+}
+
+enum ContentFormat {
+  MARKDOWN
+  RICH_TEXT
+}
+
+enum CategoryScope {
+  CONTENT
+  PRODUCT
+}
+
+enum AdminRole {
+  VIEWER
+  EDITOR
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum ThemeMode {
+  LIGHT
+  DARK
+  AUTO
+}
+
+enum CampaignKind {
+  POPUP
+  COUNTDOWN
+  BANNER
+}
+
+enum PluginPosition {
+  HEAD
+  BODY_END
+}
+
+enum IndexJobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum OutboundLinkKind {
+  LOGIN
+  REGISTER
+  PURCHASE
+  DASHBOARD
+  TICKET
+  AFFILIATE
+}
+
+/// APPGOG 管理员，不代表、映射或同步任何 Xboard 用户。
+model AdminUser {
+  id             String                 @id @default(cuid())
+  email          String                 @unique
+  displayName    String
+  passwordHash   String
+  role           AdminRole              @default(VIEWER)
+  enabled        Boolean                @default(true)
+  lastLoginAt    DateTime?              @db.Timestamptz(3)
+  createdAt      DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime               @updatedAt @db.Timestamptz(3)
+  sessions       AdminSession[]
+  auditLogs      AuditLog[]
+  pageVersions   PageVersion[]
+  pluginVersions PluginSnippetVersion[]
+  mediaAssets    MediaAsset[]
+
+  @@index([enabled, role])
+}
+
+model AdminSession {
+  id          String    @id @default(cuid())
+  adminUserId String
+  tokenHash   String    @unique
+  ip          String?
+  userAgent   String?   @db.Text
+  expiresAt   DateTime  @db.Timestamptz(3)
+  revokedAt   DateTime? @db.Timestamptz(3)
+  lastUsedAt  DateTime  @default(now()) @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId, revokedAt])
+  @@index([expiresAt])
+}
+
+/// 登录限流只保存不可逆键哈希，不保存明文邮箱与 IP 组合。
+model AdminLoginAttempt {
+  keyHash         String    @id
+  failureCount    Int       @default(0)
+  windowStartedAt DateTime  @db.Timestamptz(3)
+  blockedUntil    DateTime? @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@index([blockedUntil])
+  @@index([updatedAt])
+}
+
+model Page {
+  id                 String        @id @default(cuid())
+  name               String
+  slug               String        @unique
+  routeType          RouteType     @default(PAGE)
+  redirectUrl        String?
+  status             PublishStatus @default(DRAFT)
+  draftVersionId     String?
+  publishedVersionId String?
+  nextVersion         Int           @default(1)
+  seoTitle           String?
+  seoDescription     String?
+  seoKeywords        String?
+  ogImage            String?
+  publishedAt        DateTime?     @db.Timestamptz(3)
+  createdAt          DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime      @updatedAt @db.Timestamptz(3)
+  draftVersion       PageVersion?  @relation("PageDraftVersion", fields: [draftVersionId], references: [id], onDelete: SetNull)
+  publishedVersion   PageVersion?  @relation("PagePublishedVersion", fields: [publishedVersionId], references: [id], onDelete: SetNull)
+  versions           PageVersion[] @relation("PageVersions")
+  publishedRoute     PublishedPageRoute?
+
+  @@index([status, updatedAt])
+  @@index([routeType])
+}
+
+model PageVersion {
+  id            String     @id @default(cuid())
+  pageId        String
+  version       Int
+  schemaVersion Int        @default(1)
+  layout        Json
+  name          String
+  slug          String
+  routeType     RouteType
+  redirectUrl   String?
+  seoTitle      String?
+  seoDescription String?
+  seoKeywords   String?
+  ogImage       String?
+  changeNote    String?
+  createdById   String?
+  restoredFromId String?
+  createdAt     DateTime   @default(now()) @db.Timestamptz(3)
+  page          Page       @relation("PageVersions", fields: [pageId], references: [id], onDelete: Cascade)
+  createdBy     AdminUser? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  publishedRoute PublishedPageRoute?
+  draftFor      Page[]     @relation("PageDraftVersion")
+  publishedFor  Page[]     @relation("PagePublishedVersion")
+
+  @@unique([pageId, version])
+  @@index([pageId, createdAt])
+  @@index([restoredFromId])
+  @@index([slug])
+}
+
+/// The only live route index. Draft route edits never mutate the published URL.
+model PublishedPageRoute {
+  slug          String      @id
+  pageId        String      @unique
+  pageVersionId String      @unique
+  createdAt     DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime    @updatedAt @db.Timestamptz(3)
+  page          Page        @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  pageVersion   PageVersion @relation(fields: [pageVersionId], references: [id], onDelete: Cascade)
+
+  @@index([updatedAt])
+}
+
+/// APPGOG-owned immutable image bytes. Archiving never breaks existing public URLs.
+model MediaAsset {
+  id           String     @id @default(cuid())
+  storageKey   String     @unique
+  originalName String
+  mimeType     String
+  extension    String     @db.VarChar(8)
+  byteSize     Int
+  sha256       String     @db.VarChar(64)
+  width        Int?
+  height       Int?
+  altText      String?
+  folder       String     @default("general")
+  createdById  String?
+  archivedAt   DateTime?  @db.Timestamptz(3)
+  createdAt    DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime   @updatedAt @db.Timestamptz(3)
+  createdBy    AdminUser? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([folder, archivedAt, createdAt])
+  @@index([sha256])
+  @@index([createdById, createdAt])
+}
+
+model Category {
+  id          String        @id @default(cuid())
+  scope       CategoryScope @default(CONTENT)
+  name        String
+  slug        String
+  description String?
+  parentId    String?
+  parent      Category?     @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children    Category[]    @relation("CategoryTree")
+  sort        Int           @default(0)
+  revision    Int           @default(1)
+  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime      @updatedAt @db.Timestamptz(3)
+  contents    Content[]
+  products    Product[]
+
+  @@unique([scope, slug])
+  @@index([scope, parentId, sort])
+}
+
+model Content {
+  id             String                   @id @default(cuid())
+  type           ContentType              @default(ARTICLE)
+  format         ContentFormat            @default(MARKDOWN)
+  title          String
+  slug           String                   @unique
+  summary        String?
+  body           String                   @default("") @db.Text
+  faqQuestion    String?                  @db.Text
+  faqAnswer      String?                  @db.Text
+  coverUrl       String?
+  videoUrl       String?
+  categoryId     String?
+  category       Category?                @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  status         PublishStatus            @default(DRAFT)
+  ragEnabled     Boolean                  @default(false)
+  ragIndexedAt   DateTime?                @db.Timestamptz(3)
+  revision       Int                      @default(1)
+  publishedSlug  String?                  @unique
+  publishedSnapshot Json?
+  publishedSearchText String?             @db.Text
+  publishedHash  String?                  @db.VarChar(64)
+  viewCount      Int                      @default(0)
+  seoTitle       String?
+  seoDescription String?
+  seoKeywords    String?
+  ogImage        String?
+  publishedAt    DateTime?                @db.Timestamptz(3)
+  createdAt      DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime                 @updatedAt @db.Timestamptz(3)
+  searchVector   Unsupported("tsvector")?
+  chunks         KnowledgeChunk[]
+  indexJobs      KnowledgeIndexJob[]
+
+  @@index([status, type, publishedAt])
+  @@index([categoryId, status])
+  @@index([ragEnabled, status])
+}
+
+model KnowledgeChunk {
+  id             String                       @id @default(cuid())
+  contentId      String
+  chunkIndex     Int
+  text           String                       @db.Text
+  contentHash    String
+  embeddingModel String?
+  indexProfile   String                       @default("legacy")
+  embedding      Unsupported("vector(1536)")?
+  tokenCount     Int                          @default(0)
+  createdAt      DateTime                     @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime                     @updatedAt @db.Timestamptz(3)
+  content        Content                      @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@unique([contentId, chunkIndex])
+  @@index([contentId])
+}
+
+model KnowledgeIndexJob {
+  id           String         @id @default(cuid())
+  contentId    String
+  status       IndexJobStatus @default(PENDING)
+  attemptCount Int            @default(0)
+  errorMessage String?        @db.Text
+  contentHash  String?        @db.VarChar(64)
+  indexProfile String         @default("legacy")
+  activeKey    String?        @unique
+  availableAt  DateTime       @default(now()) @db.Timestamptz(3)
+  leaseToken   String?
+  leaseUntil   DateTime?      @db.Timestamptz(3)
+  startedAt    DateTime?      @db.Timestamptz(3)
+  finishedAt   DateTime?      @db.Timestamptz(3)
+  createdAt    DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime       @updatedAt @db.Timestamptz(3)
+  content      Content        @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([contentId, createdAt])
+  @@index([status, availableAt])
+}
+
+/// Only APPGOG AI behavior; provider credentials remain in server environment.
+model AiConfiguration {
+  id                     String   @id @default("main")
+  revision               Int      @default(1)
+  enabled                Boolean  @default(true)
+  autoIndexEnabled       Boolean  @default(true)
+  globalAssistantEnabled Boolean  @default(false)
+  topK                   Int      @default(6)
+  minimumScore           Float    @default(0.45)
+  perMinute              Int      @default(8)
+  globalPerMinute        Int      @default(60)
+  createdAt              DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt              DateTime @updatedAt @db.Timestamptz(3)
+}
+
+/// Expiring counters, not chat logs. Visitor keys are HMAC hashes, never raw IPs.
+model AiRateBucket {
+  key       String   @id
+  count     Int      @default(0)
+  expiresAt DateTime @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([expiresAt])
+}
+
+model Product {
+  id             String        @id @default(cuid())
+  sku            String?       @unique
+  name           String
+  kind           ProductKind   @default(OTHER)
+  slug           String        @unique
+  summary        String?
+  description    String        @db.Text
+  currency       String        @default("USD") @db.VarChar(3)
+  price          Decimal       @db.Decimal(12, 2)
+  compareAtPrice Decimal?      @db.Decimal(12, 2)
+  stock          Int           @default(0)
+  sales          Int           @default(0)
+  coverUrl       String?
+  gallery        Json          @default("[]")
+  externalUrl    String
+  categoryId     String?
+  category       Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  status         PublishStatus @default(DRAFT)
+  revision       Int           @default(1)
+  publishedSlug  String?       @unique
+  publishedSnapshot Json?
+  publishedPrice Decimal?      @db.Decimal(12, 2)
+  publishedSales Int?
+  seoTitle       String?
+  seoDescription String?
+  seoKeywords    String?
+  ogImage        String?
+  publishedAt    DateTime?     @db.Timestamptz(3)
+  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime      @updatedAt @db.Timestamptz(3)
+
+  @@index([status, publishedAt])
+  @@index([categoryId, status])
+  @@index([sales])
+  @@index([price])
+  @@index([status, publishedPrice])
+  @@index([status, publishedSales])
+}
+
+enum ProductKind {
+  ACCOUNT
+  SERVICE
+  DEVICE
+  OTHER
+}
+
+model Theme {
+  id        String          @id @default(cuid())
+  name      String          @unique
+  mode      ThemeMode       @default(AUTO)
+  variables Json
+  effects   Json            @default("{}")
+  active    Boolean         @default(false)
+  revision  Int             @default(1)
+  createdAt DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime        @updatedAt @db.Timestamptz(3)
+  schedules ThemeSchedule[]
+  defaultFor ThemeState[]
+
+  @@index([active])
+}
+
+model ThemeState {
+  id             String   @id @default("main")
+  defaultThemeId String?
+  revision       Int      @default(1)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+  defaultTheme   Theme?   @relation(fields: [defaultThemeId], references: [id], onDelete: Restrict)
+}
+
+model ThemeSchedule {
+  id        String   @id @default(cuid())
+  themeId   String
+  startAt   DateTime @db.Timestamptz(3)
+  endAt     DateTime @db.Timestamptz(3)
+  enabled   Boolean  @default(true)
+  timezone  String   @default("Asia/Shanghai")
+  revision  Int      @default(1)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  theme     Theme    @relation(fields: [themeId], references: [id], onDelete: Cascade)
+
+  @@index([enabled, startAt, endAt])
+  @@index([themeId])
+}
+
+model MarketingCampaign {
+  id        String       @id @default(cuid())
+  name      String
+  kind      CampaignKind
+  config    Json
+  startAt   DateTime?    @db.Timestamptz(3)
+  endAt     DateTime?    @db.Timestamptz(3)
+  enabled   Boolean      @default(false)
+  timezone  String       @default("Asia/Shanghai")
+  revision  Int          @default(1)
+  createdAt DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime     @updatedAt @db.Timestamptz(3)
+
+  @@index([enabled, startAt, endAt])
+}
+
+model GlobalSetting {
+  key       String   @id
+  value     Json
+  public    Boolean  @default(false)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([public])
+}
+
+model PluginSnippet {
+  id        String                 @id @default(cuid())
+  name      String                 @unique
+  position  PluginPosition
+  code      String                 @db.Text
+  delayMs   Int                    @default(3000)
+  enabled   Boolean                @default(false)
+  revision  Int                    @default(1)
+  createdAt DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime               @updatedAt @db.Timestamptz(3)
+  versions  PluginSnippetVersion[]
+
+  @@index([enabled, position])
+}
+
+model PluginSnippetVersion {
+  id              String         @id @default(cuid())
+  pluginSnippetId String
+  version         Int
+  position        PluginPosition
+  code            String         @db.Text
+  delayMs         Int
+  enabled         Boolean
+  changeNote      String?
+  createdById     String?
+  createdAt       DateTime       @default(now()) @db.Timestamptz(3)
+  pluginSnippet   PluginSnippet  @relation(fields: [pluginSnippetId], references: [id], onDelete: Cascade)
+  createdBy       AdminUser?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([pluginSnippetId, version])
+  @@index([pluginSnippetId, createdAt])
+}
+
+/// 仅保存普通 HTTP/HTTPS 跳转地址，不保存令牌、用户标识或 Xboard 业务数据。
+model OutboundLink {
+  id              String           @id @default(cuid())
+  kind            OutboundLinkKind @unique
+  label           String
+  destinationUrl  String
+  openInNewWindow Boolean          @default(true)
+  enabled         Boolean          @default(true)
+  createdAt       DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime         @updatedAt @db.Timestamptz(3)
+
+  @@index([enabled])
+}
+
+model AuditLog {
+  id          String     @id @default(cuid())
+  adminUserId String?
+  action      String
+  resource    String
+  resourceId  String?
+  requestId   String?
+  before      Json?
+  after       Json?
+  detail      Json?
+  ip          String?
+  userAgent   String?    @db.Text
+  createdAt   DateTime   @default(now()) @db.Timestamptz(3)
+  adminUser   AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: SetNull)
+
+  @@index([adminUserId, createdAt])
+  @@index([resource, resourceId, createdAt])
+  @@index([requestId])
+  @@index([createdAt])
+}

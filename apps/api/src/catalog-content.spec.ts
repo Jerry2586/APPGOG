@@ -1,0 +1,13 @@
+import {catalogMoney,normalizeProduct,productSnapshot,purchaseUrl} from './catalog-content';
+import {CatalogWriteDto} from './catalog.dto';
+import {Prisma} from '@prisma/client';
+describe('stage 9 catalog validation',()=>{
+  const dto=(extra:any={})=>Object.assign(new CatalogWriteDto(),{name:'设备',slug:'devices/test',price:'10.20',...extra});
+  it('stores exact two-decimal prices and permits zero',()=>{expect(catalogMoney('0')).toBe('0.00');expect(catalogMoney('9999999999.99')).toBe('9999999999.99');expect(catalogMoney(12.3)).toBe('12.30')});
+  it('serializes real Prisma Decimal values with two fractional digits',()=>{const row=normalizeProduct(dto());const {snapshot}=productSnapshot({...row,price:new Prisma.Decimal('19.90'),compareAtPrice:new Prisma.Decimal('30.00')});expect(snapshot.price).toBe('19.90');expect(snapshot.compareAtPrice).toBe('30.00');expect(productSnapshot({...row,price:new Prisma.Decimal('0')}).snapshot.price).toBe('0.00')});
+  it.each(['-1','1.001','1e3','10000000000','','NaN','Infinity','0.30000000000000004'])('rejects invalid or imprecise money %s',value=>expect(()=>catalogMoney(value)).toThrow());
+  it('checks comparison price and safe unique gallery',()=>{expect(()=>normalizeProduct(dto({compareAtPrice:'9.99'}))).toThrow();expect(()=>normalizeProduct(dto({gallery:['javascript:x']}))).toThrow();expect(()=>normalizeProduct(dto({gallery:['https://example.com/a','https://example.com/a']}))).toThrow();expect(normalizeProduct(dto({gallery:['/api/v1/public/media/id']})).gallery).toHaveLength(1)});
+  it.each(['javascript:alert(1)','//example.com','/checkout','https://user:password@example.com/pay','https:\\example.com/pay','data:text/html,x'])('rejects unsafe purchase URL %s',url=>expect(()=>purchaseUrl(url)).toThrow());
+  it('allows supplier query parameters without adding identities, requires URL only when publishing',()=>{expect(purchaseUrl('https://example.com/pay?item=abc')).toBe('https://example.com/pay?item=abc');expect(purchaseUrl('')).toBe('');expect(()=>purchaseUrl('',true)).toThrow()});
+  it('renders safe details and marks zero stock or unsafe legacy links unavailable',()=>{const row=normalizeProduct(dto({stock:0,description:'<script>evil()</script>\n\n**设备**',externalUrl:'https://example.com/pay'}));expect(productSnapshot(row).available).toBe(false);expect(productSnapshot(row).html).toContain('<strong>设备</strong>');expect(productSnapshot(row).html).not.toContain('<script>');expect(productSnapshot({...row,stock:2,externalUrl:'javascript:x'}).available).toBe(false);expect(productSnapshot({...row,stock:2}).available).toBe(true)});
+});
